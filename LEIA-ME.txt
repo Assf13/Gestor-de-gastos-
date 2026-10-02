@@ -1,0 +1,18 @@
+# Gestor de Gastos - PWA
+
+Este pacote contém uma versão PWA do Gestor de Gastos.
+
+Arquivos principais:
+- index.html: aplicativo
+- manifest.json: configuração de instalação
+- service-worker.js: cache/offline
+- icons/: ícones do aplicativo
+
+## Instalação no iPhone
+1. Publique esta pasta em um endereço HTTPS.
+2. Abra o endereço no Safari.
+3. Toque em Compartilhar.
+4. Escolha "Adicionar à Tela de Início".
+5. Confirme.
+
+Os dados do aplicativo continuam sendo armazenados no localStorage do navegador, como na versão original. Use a função de backup do próprio aplicativo para exportar seus dados periodicamente.
