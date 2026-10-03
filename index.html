@@ -4,12 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0f172a">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Gestor de Gastos">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icons/icon-180.png">
-
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Gestor de Gastos</title>
 <style>
@@ -98,7 +92,7 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
 <section id="v-resumo" class="on">
   <div id="alertas"></div>
   <div class="kpis" id="kpis"></div>
-  <div class="card"><h3>Fixas x Variáveis</h3><div id="fixvar"></div></div>
+  <div class="card"><h3>Fixas x Únicas x Parceladas</h3><div id="fixvar"></div></div>
   <div id="pessoas-resumo"></div>
   <div class="card"><h3>💳 Faturas dos cartões no mês</h3><div id="faturas"></div></div>
   <div class="card"><h3>Orçamento por categoria (geral)</h3><div id="bars"></div></div>
@@ -121,7 +115,7 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
         <div><label>Data da compra</label><input type="date" id="l-data"></div>
         <div><label>Vencimento</label><input type="date" id="l-venc"></div>
       </div>
-      <div id="bloco-parc"><label>Parcelas</label><select id="l-parc"></select></div>
+      <div id="bloco-parc" class="hide"><label>Parcelas</label><select id="l-parc"></select></div>
       <label class="check"><input type="checkbox" id="l-div"> Dividir com outra pessoa (50% / 50%)</label>
       <div id="bloco-div" class="hide"><label>Dividir com</label><select id="l-pessoa2"></select></div>
       <label class="check"><input type="checkbox" id="l-pago"> Já está paga</label>
@@ -132,9 +126,9 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
       <label class="check"><input type="checkbox" id="l-recebido" checked> Já recebido</label>
     </div>
 
-    <label>Tipo</label>
-    <div class="seg" id="fixa-seg"><button data-v="0" class="on">Variável</button><button data-v="1">Fixa</button></div>
-    <div id="bloco-rep" class="hide"><label>Repetir automaticamente por quantos meses?</label><input type="number" id="l-rep" value="12" min="1" max="60"></div>
+    <label>Modalidade</label>
+    <div class="seg" id="fixa-seg"><button data-v="U" class="on">Única</button><button data-v="P">Parcelada</button><button data-v="F">Fixa</button></div>
+    <p class="mut small" id="modo-hint" style="margin-top:6px"></p>
 
     <div class="hint" id="l-preview"></div>
     <label class="check"><input type="checkbox" id="l-cal"> Baixar lembrete para o Calendário do iPhone</label>
@@ -147,7 +141,7 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
   <div class="card">
     <div class="row2">
       <div><label>Tipo</label><select id="f-tipo"><option value="">Todos</option><option value="D">Despesas</option><option value="R">Receitas</option></select></div>
-      <div><label>Fixa/Variável</label><select id="f-fixa"><option value="">Todas</option><option value="1">Fixas</option><option value="0">Variáveis</option></select></div>
+      <div><label>Modalidade</label><select id="f-fixa"><option value="">Todas</option><option value="F">Fixas</option><option value="U">Únicas</option><option value="P">Parceladas</option></select></div>
       <div><label>Pessoa</label><select id="f-pessoa"></select></div>
       <div><label>Pagamento</label><select id="f-pag"></select></div>
     </div>
@@ -245,7 +239,22 @@ if(!D||!Array.isArray(D.lanc)){
 function save(){localStorage.setItem(KEY,JSON.stringify(D));}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2300);}
 
-let mesSel=hoje().slice(0,7), tipo='D', fixa=false, editId=null;
+let mesSel=hoje().slice(0,7), tipo='D', modo='U', editId=null;
+const modoDe=l=>l.fixa?'F':(l.parc?'P':'U');
+if(!D.fim)D.fim={};
+/* fixas são permanentes: mantém sempre lançamentos gerados até 12 meses à frente */
+function extender(){
+  const alvo=[hoje().slice(0,7),mesSel].sort()[1], lim=addMes(alvo+'-01',12).slice(0,7);
+  const grupos={};D.lanc.filter(l=>l.fixa&&!D.fim[l.g]).forEach(l=>{const k=l.g+'|'+l.p;(grupos[k]=grupos[k]||[]).push(l);});
+  let mud=false;
+  Object.values(grupos).forEach(a=>{a.sort((x,y)=>(mesDe(x)<mesDe(y)?-1:1));let u=a[a.length-1],i=1;
+    const base=u;
+    while(mesDe(u)<lim&&i<200){const n={...base,id:uid(),desc:(base.desc||'').replace(/ \(\d+\/\d+\)$/,''),ok:false,parc:''};
+      if(base.t==='D'){n.venc=addMes(base.venc||base.d,i);}else{n.d=addMes(base.d,i);}
+      D.lanc.push(n);u=n;i++;mud=true;}
+  });
+  if(mud)save();
+}
 const isCred=n=>(D.pags.find(p=>p.n===n)||{}).cred;
 const mesDe=l=>((l.t==='D'?(l.venc||l.d):l.d)||'').slice(0,7); // competência: vencimento / recebimento
 const doMes=()=>D.lanc.filter(l=>mesDe(l)===mesSel);
@@ -261,13 +270,15 @@ function render(){
   $('kpis').innerHTML=[['Receitas',BRL(tr),'pos'],['Despesas',BRL(td),'neg'],['Saldo do mês',BRL(saldo),saldo>=0?'pos':'neg'],['Ainda a pagar',BRL(aPagar),aPagar>0?'warnc':'']]
     .map(([k,v,c])=>`<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
 
-  const rf=sum(R.filter(l=>l.fixa)), rv=tr-rf, df=sum(De.filter(l=>l.fixa)), dv=td-df;
+  extender();
+  const rf=sum(R.filter(l=>l.fixa)), rv=tr-rf, df=sum(De.filter(l=>l.fixa)), dp=sum(De.filter(l=>modoDe(l)==='P')), du=td-df-dp;
   const pc=rf>0?Math.round(df/rf*100):0;
   $('fixvar').innerHTML=`
     <div class="listrow"><span>Receitas fixas</span><b class="pos">${BRL(rf)}</b></div>
-    <div class="listrow"><span>Receitas variáveis</span><b class="pos">${BRL(rv)}</b></div>
+    <div class="listrow"><span>Receitas únicas</span><b class="pos">${BRL(rv)}</b></div>
     <div class="listrow"><span>Despesas fixas</span><b class="neg">${BRL(df)}</b></div>
-    <div class="listrow"><span>Despesas variáveis</span><b class="neg">${BRL(dv)}</b></div>
+    <div class="listrow"><span>Despesas únicas</span><b class="neg">${BRL(du)}</b></div>
+    <div class="listrow"><span>Parcelas do mês</span><b class="neg">${BRL(dp)}</b></div>
     ${rf>0?`<div class="bar-row" style="margin-top:10px"><div class="top"><span>Despesas fixas consomem</span><span class="r">${pc}% da receita fixa</span></div><div class="bar"><i class="${pc>100?'over':pc>=80?'warn':''}" style="width:${Math.min(100,pc)}%"></i></div></div>`:''}`;
 
   // por pessoa
@@ -327,32 +338,33 @@ function fillSelects(){
   const f=(id,arr,lab)=>{const v=$(id).value;$(id).innerHTML=`<option value="">${lab}</option>`+opt(arr,v);};
   f('f-pessoa',D.pessoas,'Todas'); f('f-pag',D.pags.map(p=>p.n),'Todas');
   f('f-cat',[...D.catsD.map(c=>c.n),...D.catsR],'Todas');
-  if(!$('l-parc').options.length)$('l-parc').innerHTML=Array.from({length:24},(_,i)=>`<option value="${i+1}">${i+1}x</option>`).join('');
+  if(!$('l-parc').options.length)$('l-parc').innerHTML=Array.from({length:23},(_,i)=>`<option value="${i+2}">${i+2}x</option>`).join('');
 }
 
 /* ---------- LANÇAR ---------- */
 function setTipo(v){tipo=v;document.querySelectorAll('#tipo-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   $('tipo-seg').classList.toggle('rec',v==='R');$('bloco-d').classList.toggle('hide',v!=='D');$('bloco-r').classList.toggle('hide',v!=='R');
   $('l-cat').value='';fillSelects();updForm();}
-function setFixa(v){fixa=v;document.querySelectorAll('#fixa-seg button').forEach(b=>b.classList.toggle('on',(b.dataset.v==='1')===v));updForm();}
+function setModo(v){modo=v;document.querySelectorAll('#fixa-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));updForm();}
 function updForm(){
   const cred=isCred($('l-pag').value);
-  $('bloco-parc').classList.toggle('hide',!(tipo==='D'&&cred&&!fixa));
-  if(!cred||fixa)$('l-parc').value='1';
+  if(tipo==='R'&&modo==='P')modo='U';
+  document.querySelectorAll('#fixa-seg button').forEach(b=>{b.classList.toggle('on',b.dataset.v===modo);if(b.dataset.v==='P')b.classList.toggle('hide',tipo==='R');});
+  $('bloco-parc').classList.toggle('hide',!(tipo==='D'&&modo==='P'));
   $('bloco-div').classList.toggle('hide',!$('l-div').checked);
-  $('bloco-rep').classList.toggle('hide',!fixa);
+  $('modo-hint').textContent=modo==='F'?'Permanente: repete todo mês até você encerrar (excluir "este e os próximos").':modo==='P'?'Dividida em parcelas mensais; encerra na última.':(tipo==='D'?'Pagamento de 1x (cartão, débito, Pix ou dinheiro).':'Entrada ocasional, só neste mês.');
   preview();
 }
 function preview(){
   const v=parseFloat($('l-valor').value)||0, el=$('l-preview');
   if(!v){el.textContent='Preencha o valor para ver como será lançado.';return;}
-  const n=tipo==='D'?(+$('l-parc').value||1):1, rep=fixa?Math.max(1,+$('l-rep').value||1):1;
+  const n=tipo==='D'&&modo==='P'?(+$('l-parc').value||2):1;
   const div=tipo==='D'&&$('l-div').checked&&$('l-pessoa2').value;
   const parc=v/n, cada=div?parc/2:parc;
   let t='';
   if(n>1)t+=`${n}x de ${BRL(parc)}`; else t+=BRL(v);
   if(div)t+=` → ${esc($('l-pessoa').value)} ${BRL(cada)} + ${esc($('l-pessoa2').value)} ${BRL(cada)}`;
-  if(fixa)t+=` · repetido por ${rep} mês(es)`;
+  if(modo==='F')t+=' · todo mês (permanente)';
   el.innerHTML=t;
 }
 function lancar(){
@@ -361,11 +373,11 @@ function lancar(){
   const p=$('l-pessoa').value,c=$('l-cat').value,desc=$('l-desc').value.trim();
   const g=uid(), novos=[];
   if(tipo==='R'){
-    const d=$('l-receb').value||hoje(), rep=fixa?Math.max(1,+$('l-rep').value||1):1;
-    for(let i=0;i<rep;i++)novos.push({id:uid(),g,t:'R',p,c,desc:desc+(rep>1?` (${i+1}/${rep})`:''),v:r2(v),d:addMes(d,i),fixa,ok:i===0?$('l-recebido').checked:false});
+    const d=$('l-receb').value||hoje();
+    novos.push({id:uid(),g,t:'R',p,c,desc,v:r2(v),d,fixa:modo==='F',ok:$('l-recebido').checked});
   }else{
     const pag=$('l-pag').value,d=$('l-data').value||hoje(),venc=$('l-venc').value||d;
-    const n=+$('l-parc').value||1, rep=fixa?Math.max(1,+$('l-rep').value||1):1, tot=Math.max(n,rep);
+    const fixa=modo==='F', n=modo==='P'?(+$('l-parc').value||2):1, tot=n;
     const p2=$('l-div').checked?$('l-pessoa2').value:'';
     if($('l-div').checked&&!p2)return alert('Cadastre outra pessoa em Ajustes para dividir.');
     const quem=p2?[p,p2]:[p];
@@ -373,14 +385,14 @@ function lancar(){
     const base=Math.floor(v/n*100)/100, sobra=r2(v-base*n);
     for(let i=0;i<tot;i++){
       const vp=n>1?(i===0?r2(base+sobra):base):v;
-      const lab=n>1?` (${i+1}/${n})`:rep>1?` (${i+1}/${rep})`:'';
+      const lab=n>1?` (${i+1}/${n})`:'';
       quem.forEach((pp,k)=>{
         let vv=p2?(k===0?Math.ceil(vp*50)/100:r2(vp-Math.ceil(vp*50)/100)):vp;
         novos.push({id:uid(),g,t:'D',p:pp,c,pag,desc:desc+lab,v:r2(vv),d,venc:addMes(venc,i),fixa,ok:i===0?$('l-pago').checked:false,div:p2?(k===0?p2:p):'',parc:n>1?`${i+1}/${n}`:''});
       });
     }
   }
-  D.lanc.push(...novos);save();
+  D.lanc.push(...novos);extender();save();
   if($('l-cal').checked){const prim=novos.filter((x,i,a)=>a.findIndex(y=>(y.venc||y.d)===(x.venc||x.d))===i);ics(prim);}
   $('l-valor').value='';$('l-desc').value='';$('l-div').checked=false;$('l-cal').checked=false;
   render();updForm();toast(`${novos.length} lançamento(s) registrado(s) ✔`);
@@ -401,7 +413,7 @@ function baixar(blob,nome){const a=document.createElement('a');a.href=URL.create
 /* ---------- HISTÓRICO ---------- */
 function filtrados(){
   const ft=$('f-tipo').value,ff=$('f-fixa').value,fp=$('f-pessoa').value,fg=$('f-pag').value,fc=$('f-cat').value;
-  return doMes().filter(l=>(!ft||l.t===ft)&&(!ff||(l.fixa?'1':'0')===ff)&&(!fp||l.p===fp)&&(!fg||l.pag===fg)&&(!fc||l.c===fc))
+  return doMes().filter(l=>(!ft||l.t===ft)&&(!ff||modoDe(l)===ff)&&(!fp||l.p===fp)&&(!fg||l.pag===fg)&&(!fc||l.c===fc))
     .sort((a,b)=>String(mesDe(a)&&(a.venc||a.d)).localeCompare(String(b.venc||b.d)));
 }
 function renderHist(){
@@ -414,7 +426,7 @@ function renderHist(){
       <div class="d">${l.t==='R'?'⬆️ ':''}${esc(l.desc||l.c)}</div>
       <div class="v ${l.t==='R'?'pos':''}">${l.t==='R'?'+':''}${BRL(l.v)}</div>
       <div class="m">${l.t==='D'?`Compra ${fmtD(l.d)} · Vence ${fmtD(l.venc)}`:`Recebimento ${fmtD(l.d)}`}<br>
-        <span class="chip">👤 ${esc(l.p)}</span><span class="chip ${l.t==='R'?'r':''}">${esc(l.c)}</span>${l.pag?`<span class="chip">${esc(l.pag)}</span>`:''}${l.fixa?'<span class="chip f">fixa</span>':''}${l.div?`<span class="chip">½ com ${esc(l.div)}</span>`:''}${st}</div>
+        <span class="chip">👤 ${esc(l.p)}</span><span class="chip ${l.t==='R'?'r':''}">${esc(l.c)}</span>${l.pag?`<span class="chip">${esc(l.pag)}</span>`:''}${l.fixa?'<span class="chip f">fixa</span>':l.parc?'<span class="chip">parcelada</span>':'<span class="chip">única</span>'}${l.div?`<span class="chip">½ com ${esc(l.div)}</span>`:''}${st}</div>
       <div class="acts">
         <button data-tog="${l.id}">${l.ok?'↩️ Desfazer':(l.t==='D'?'✓ Pagar':'✓ Recebido')}</button>
         <button data-cal="${l.id}">📅</button>
@@ -470,8 +482,8 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('main section').forEach(s=>s.classList.toggle('on',s.id===b.dataset.t));window.scrollTo(0,0);});
 $('mes').onchange=e=>{mesSel=e.target.value||hoje().slice(0,7);render();};
 document.querySelectorAll('#tipo-seg button').forEach(b=>b.onclick=()=>setTipo(b.dataset.v));
-document.querySelectorAll('#fixa-seg button').forEach(b=>b.onclick=()=>setFixa(b.dataset.v==='1'));
-['l-valor','l-parc','l-rep','l-pessoa2'].forEach(id=>$(id).addEventListener('input',preview));
+document.querySelectorAll('#fixa-seg button').forEach(b=>b.onclick=()=>setModo(b.dataset.v));
+['l-valor','l-parc','l-pessoa2'].forEach(id=>$(id).addEventListener('input',preview));
 $('l-pag').onchange=updForm;$('l-div').onchange=updForm;$('l-parc').onchange=preview;
 $('l-pessoa').onchange=()=>{fillSelects();preview();};
 $('l-data').onchange=()=>{if(!$('l-venc').value)$('l-venc').value=$('l-data').value;};
@@ -485,7 +497,7 @@ document.addEventListener('click',e=>{
   else if(ds.edit)abrirEdit(ds.edit);
   else if(ds.del){const l=D.lanc.find(x=>x.id===ds.del);if(!l)return;const grp=D.lanc.filter(x=>x.g===l.g);
     if(grp.length>1){const r=prompt(`Este lançamento faz parte de um grupo de ${grp.length}.\nDigite 1 = excluir só este\n2 = este e os próximos\n3 = o grupo inteiro`,'1');
-      if(r==='1')D.lanc=D.lanc.filter(x=>x.id!==l.id);else if(r==='2')D.lanc=D.lanc.filter(x=>!(x.g===l.g&&(x.venc||x.d)>=(l.venc||l.d)));else if(r==='3')D.lanc=D.lanc.filter(x=>x.g!==l.g);else return;}
+      if(r==='1')D.lanc=D.lanc.filter(x=>x.id!==l.id);else if(r==='2'){if(l.fixa)D.fim[l.g]=true;D.lanc=D.lanc.filter(x=>!(x.g===l.g&&(x.venc||x.d)>=(l.venc||l.d)));}else if(r==='3'){delete D.fim[l.g];D.lanc=D.lanc.filter(x=>x.g!==l.g);}else return;}
     else{if(!confirm('Excluir este lançamento?'))return;D.lanc=D.lanc.filter(x=>x.id!==l.id);}
     save();render();toast('Excluído');}
   else if(ds.rpes){const i=+ds.rpes;if(confirm(`Remover ${D.pessoas[i]} da lista? (os lançamentos antigos ficam)`)){D.pessoas.splice(i,1);save();render();}}
@@ -521,8 +533,8 @@ $('modal').onclick=e=>{if(e.target.id==='modal')$('modal').classList.remove('on'
 
 $('h-csv').onclick=()=>{
   const L=filtrados(),c=s=>`"${String(s??'').replace(/"/g,'""')}"`;
-  const lin=[['Tipo','Pessoa','Categoria','Descrição','Pagamento','Data','Vencimento','Valor','Fixa','Dividido com','Parcela','Status']]
-    .concat(L.map(l=>[l.t==='D'?'Despesa':'Receita',l.p,l.c,l.desc,l.pag||'',fmtD(l.d),l.t==='D'?fmtD(l.venc):'',String(l.v).replace('.',','),l.fixa?'Sim':'Não',l.div||'',l.parc||'',l.t==='D'?(l.ok?'Paga':'A vencer'):(l.ok?'Recebida':'Prevista')]));
+  const lin=[['Tipo','Pessoa','Categoria','Descrição','Pagamento','Data','Vencimento','Valor','Modalidade','Dividido com','Parcela','Status']]
+    .concat(L.map(l=>[l.t==='D'?'Despesa':'Receita',l.p,l.c,l.desc,l.pag||'',fmtD(l.d),l.t==='D'?fmtD(l.venc):'',String(l.v).replace('.',','),({F:'Fixa',U:'Única',P:'Parcelada'})[modoDe(l)],l.div||'',l.parc||'',l.t==='D'?(l.ok?'Paga':'A vencer'):(l.ok?'Recebida':'Prevista')]));
   baixar(new Blob(['\ufeff'+lin.map(r=>r.map(c).join(';')).join('\n')],{type:'text/csv'}),`lancamentos_${mesSel}.csv`);
 };
 $('b-exp').onclick=()=>baixar(new Blob([JSON.stringify(D,null,2)],{type:'application/json'}),`gestor_gastos_backup_${hoje()}.json`);
@@ -533,14 +545,5 @@ $('b-del').onclick=()=>{if(confirm('Apagar TODOS os dados?')&&confirm('Tem certe
 $('l-data').value=hoje();$('l-venc').value=hoje();$('l-receb').value=hoje();
 fillSelects();render();updForm();notificar();
 </script>
-
-<script>
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
-  });
-}
-</script>
-
 </body>
 </html>
