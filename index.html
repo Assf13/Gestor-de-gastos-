@@ -78,6 +78,9 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;display:none;align-items:flex-end;justify-content:center}
 .modal.on{display:flex}
 .modal .sheet{background:var(--panel);border:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;max-width:560px;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto}
+.sw{width:30px;height:30px;min-width:30px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
+.pal{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin:12px 0}.pal button{aspect-ratio:1;border-radius:50%;border:2px solid transparent;cursor:pointer}.pal button.on{border-color:var(--txt)}
+.chip.cc{font-weight:600}
 .empty{text-align:center;color:var(--mut);padding:22px 10px;font-size:14px}
 .hide{display:none!important}
 </style>
@@ -102,7 +105,7 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
 <section id="v-lancar">
   <div class="card">
     <div class="seg" id="tipo-seg"><button data-v="D" class="on">Despesa</button><button data-v="R">Receita</button></div>
-    <label>Valor total (R$)</label><input type="number" step="0.01" inputmode="decimal" id="l-valor" placeholder="0,00">
+    <label id="l-vlab">Valor (R$)</label><input type="number" step="0.01" inputmode="decimal" id="l-valor" placeholder="0,00">
     <div class="row2">
       <div><label>Pessoa</label><select id="l-pessoa"></select></div>
       <div><label>Categoria</label><select id="l-cat"></select></div>
@@ -115,7 +118,15 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
         <div><label>Data da compra</label><input type="date" id="l-data"></div>
         <div><label>Vencimento</label><input type="date" id="l-venc"></div>
       </div>
-      <div id="bloco-parc" class="hide"><label>Parcelas</label><select id="l-parc"></select></div>
+      <div id="bloco-parc" class="hide">
+        <label>O valor informado é</label>
+        <div class="seg" id="vmodo-seg"><button data-v="P" class="on">Valor da parcela</button><button data-v="T">Valor total</button></div>
+        <div class="row2">
+          <div><label>Total de parcelas</label><select id="l-parc"></select></div>
+          <div><label>Parcela atual</label><select id="l-pini"></select></div>
+        </div>
+        <p class="mut small" style="margin-top:6px">Ex.: 10 de 12 → lança 10/12 no vencimento informado e 11/12, 12/12 nos meses seguintes.</p>
+      </div>
       <label class="check"><input type="checkbox" id="l-div"> Dividir com outra pessoa (50% / 50%)</label>
       <div id="bloco-div" class="hide"><label>Dividir com</label><select id="l-pessoa2"></select></div>
       <label class="check"><input type="checkbox" id="l-pago"> Já está paga</label>
@@ -201,6 +212,13 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
   <button class="btn sec" id="e-cancel">Cancelar</button>
 </div></div>
 
+<div class="modal" id="mcor"><div class="sheet">
+  <h3 id="cor-tit">Escolher cor</h3>
+  <div class="pal" id="cor-pal"></div>
+  <label>Ou escolha qualquer outra cor</label><input type="color" id="cor-livre" style="height:48px;padding:4px">
+  <button class="btn" id="cor-ok">Usar esta cor</button>
+  <button class="btn sec" id="cor-cancel">Cancelar</button>
+</div></div>
 <div id="toast"></div>
 
 <script>
@@ -239,7 +257,13 @@ if(!D||!Array.isArray(D.lanc)){
 function save(){localStorage.setItem(KEY,JSON.stringify(D));}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2300);}
 
-let mesSel=hoje().slice(0,7), tipo='D', modo='U', editId=null;
+const PAL=['#ef4444','#dc2626','#991b1b','#f97316','#ea580c','#f59e0b','#d97706','#eab308','#facc15','#84cc16','#65a30d','#22c55e','#16a34a','#166534','#10b981','#059669','#14b8a6','#0d9488','#06b6d4','#0891b2','#0ea5e9','#0284c7','#3b82f6','#2563eb','#1e3a8a','#6366f1','#4f46e5','#8b5cf6','#7c3aed','#820ad1','#a855f7','#9333ea','#d946ef','#c026d3','#ec4899','#db2777','#f43f5e','#e11d48','#fb7185','#fda4af','#a16207','#78350f','#92400e','#b45309','#64748b','#475569','#334155','#1f2937','#9ca3af','#d1d5db','#ffffff','#000000'];
+const CORDEF={p:{Arthur:'#1e3a8a'},c:{'Pensão alimentícia':'#e11d48','Moto':'#f97316','Alimentação':'#22c55e','Moradia':'#3b82f6','Lazer':'#d946ef','Serviços':'#14b8a6','Investimento':'#eab308','Uber':'#334155','Outros':'#9ca3af','Salário':'#10b981','Quinzena':'#0ea5e9','Ganho Extra':'#a855f7','Auxílio Combustível':'#f59e0b'},pag:{'Cartão C6 Crédito':'#1f2937','Cartão C6 Débito':'#475569','Cartão Nu Bank':'#820ad1','Cartão Mercado Pago':'#0284c7','Pix':'#14b8a6','Dinheiro':'#16a34a'}};
+if(!D.cores)D.cores={p:{},c:{},pag:{}};
+function corDe(k,n){if(!n)return '#9ca3af';const m=D.cores[k];if(!m[n]){const usados=Object.values(m);m[n]=CORDEF[k][n]||PAL.find((c,i)=>i%3===0&&!usados.includes(c))||PAL[Math.floor(Math.random()*PAL.length)];save();}return m[n];}
+function chipC(k,n,pre){const c=corDe(k,n);const h=c.replace('#',''),lum=(parseInt(h.substr(0,2),16)*299+parseInt(h.substr(2,2),16)*587+parseInt(h.substr(4,2),16)*114)/1000;return `<span class="chip cc" style="border-color:${c};color:${lum>150?'#111':'#fff'};background:${c}">${pre||''}${esc(n)}</span>`;}
+function sw(k,n){return `<button class="sw" data-cor="${k}" data-cn="${esc(n)}" title="Cor" style="background:${corDe(k,n)}"></button>`;}
+let mesSel=hoje().slice(0,7), tipo='D', modo='U', vmodo='P', editId=null, corAlvo=null;
 const modoDe=l=>l.fixa?'F':(l.parc?'P':'U');
 if(!D.fim)D.fim={};
 /* fixas são permanentes: mantém sempre lançamentos gerados até 12 meses à frente */
@@ -288,9 +312,9 @@ function render(){
     const g=sum(lp.filter(l=>l.t==='D')), r=sum(lp.filter(l=>l.t==='R'));
     const cats={}; lp.filter(l=>l.t==='D').forEach(l=>cats[l.c]=(cats[l.c]||0)+(+l.v||0));
     const ord=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
-    return `<div class="card pessoa"><div class="ph"><b>👤 ${esc(p)}</b><b class="neg">${BRL(g)}</b></div>
+    return `<div class="card pessoa"><div class="ph"><b style="color:${corDe('p',p)}">👤 ${esc(p)}</b><b class="neg">${BRL(g)}</b></div>
       <div class="mini"><span>Recebeu <b class="pos">${BRL(r)}</b></span><span>Saldo <b class="${r-g>=0?'pos':'neg'}">${BRL(r-g)}</b></span></div>
-      ${ord.length?ord.map(([c,v])=>{const w=g>0?v/g*100:0;return `<div class="bar-row"><div class="top"><span>${esc(c)}</span><span class="r">${BRL(v)} · ${Math.round(w)}%</span></div><div class="bar"><i style="width:${w}%"></i></div></div>`}).join(''):'<div class="mut small">Sem despesas neste mês.</div>'}
+      ${ord.length?ord.map(([c,v])=>{const w=g>0?v/g*100:0;return `<div class="bar-row"><div class="top"><span><span style="color:${corDe('c',c)}">●</span> ${esc(c)}</span><span class="r">${BRL(v)} · ${Math.round(w)}%</span></div><div class="bar"><i style="width:${w}%;background:${corDe('c',c)}"></i></div></div>`}).join(''):'<div class="mut small">Sem despesas neste mês.</div>'}
     </div>`;
   }).join('');
   $('pessoas-resumo').innerHTML=html;
@@ -298,12 +322,12 @@ function render(){
   // faturas
   const fat=D.pags.filter(p=>p.cred).map(p=>{const it=De.filter(l=>l.pag===p.n);return{n:p.n,v:sum(it),ab:sum(it.filter(l=>!l.ok)),venc:it.map(l=>l.venc).sort()[0]}});
   const vista=sum(De.filter(l=>!isCred(l.pag)));
-  $('faturas').innerHTML=fat.map(f=>`<div class="listrow"><span>${esc(f.n)}${f.venc?`<br><span class="mut small">vence ${fmtD(f.venc)}${f.ab>0?' · a pagar '+BRL(f.ab):' · paga'}</span>`:''}</span><b>${BRL(f.v)}</b></div>`).join('')
+  $('faturas').innerHTML=fat.map(f=>`<div class="listrow"><span><span style="color:${corDe('pag',f.n)}">●</span> ${esc(f.n)}${f.venc?`<br><span class="mut small">vence ${fmtD(f.venc)}${f.ab>0?' · a pagar '+BRL(f.ab):' · paga'}</span>`:''}</span><b>${BRL(f.v)}</b></div>`).join('')
     +`<div class="listrow"><span class="mut">À vista (Pix, débito, dinheiro)</span><b>${BRL(vista)}</b></div>`;
 
   const porCat={};De.forEach(l=>porCat[l.c]=(porCat[l.c]||0)+(+l.v||0));
   $('bars').innerHTML=D.catsD.map(c=>{const g=porCat[c.n]||0,p=c.lim>0?Math.min(100,g/c.lim*100):(g>0?100:0);
-    return `<div class="bar-row"><div class="top"><span>${esc(c.n)}</span><span class="r">${BRL(g)} / ${BRL(c.lim)}</span></div><div class="bar"><i class="${g>c.lim?'over':p>=80?'warn':''}" style="width:${p}%"></i></div></div>`}).join('');
+    return `<div class="bar-row"><div class="top"><span><span style="color:${corDe('c',c.n)}">●</span> ${esc(c.n)}</span><span class="r">${BRL(g)} / ${BRL(c.lim)}</span></div><div class="bar"><i class="${g>c.lim?'over':p>=80?'warn':''}" style="width:${p}%"></i></div></div>`}).join('');
 
   renderAlertas(); fillSelects(); renderHist(); renderCfg(); preview();
 }
@@ -338,10 +362,12 @@ function fillSelects(){
   const f=(id,arr,lab)=>{const v=$(id).value;$(id).innerHTML=`<option value="">${lab}</option>`+opt(arr,v);};
   f('f-pessoa',D.pessoas,'Todas'); f('f-pag',D.pags.map(p=>p.n),'Todas');
   f('f-cat',[...D.catsD.map(c=>c.n),...D.catsR],'Todas');
-  if(!$('l-parc').options.length)$('l-parc').innerHTML=Array.from({length:23},(_,i)=>`<option value="${i+2}">${i+2}x</option>`).join('');
+  if(!$('l-parc').options.length){$('l-parc').innerHTML=Array.from({length:59},(_,i)=>`<option value="${i+2}">${i+2}x</option>`).join('');fillPini();}
 }
 
 /* ---------- LANÇAR ---------- */
+function fillPini(){const n=+$('l-parc').value||2,v=Math.min(+$('l-pini').value||1,n);$('l-pini').innerHTML=Array.from({length:n},(_,i)=>`<option value="${i+1}"${i+1===v?' selected':''}>${i+1} de ${n}</option>`).join('');}
+function setVmodo(v){vmodo=v;document.querySelectorAll('#vmodo-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));updForm();}
 function setTipo(v){tipo=v;document.querySelectorAll('#tipo-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   $('tipo-seg').classList.toggle('rec',v==='R');$('bloco-d').classList.toggle('hide',v!=='D');$('bloco-r').classList.toggle('hide',v!=='R');
   $('l-cat').value='';fillSelects();updForm();}
@@ -352,6 +378,7 @@ function updForm(){
   document.querySelectorAll('#fixa-seg button').forEach(b=>{b.classList.toggle('on',b.dataset.v===modo);if(b.dataset.v==='P')b.classList.toggle('hide',tipo==='R');});
   $('bloco-parc').classList.toggle('hide',!(tipo==='D'&&modo==='P'));
   $('bloco-div').classList.toggle('hide',!$('l-div').checked);
+  $('l-vlab').textContent=tipo==='D'&&modo==='P'?(vmodo==='P'?'Valor de cada parcela (R$)':'Valor total da compra (R$)'):'Valor (R$)';
   $('modo-hint').textContent=modo==='F'?'Permanente: repete todo mês até você encerrar (excluir "este e os próximos").':modo==='P'?'Dividida em parcelas mensais; encerra na última.':(tipo==='D'?'Pagamento de 1x (cartão, débito, Pix ou dinheiro).':'Entrada ocasional, só neste mês.');
   preview();
 }
@@ -360,9 +387,9 @@ function preview(){
   if(!v){el.textContent='Preencha o valor para ver como será lançado.';return;}
   const n=tipo==='D'&&modo==='P'?(+$('l-parc').value||2):1;
   const div=tipo==='D'&&$('l-div').checked&&$('l-pessoa2').value;
-  const parc=v/n, cada=div?parc/2:parc;
+  const parc=n>1&&vmodo==='P'?v:v/n, cada=div?parc/2:parc, ini=n>1?(+$('l-pini').value||1):1;
   let t='';
-  if(n>1)t+=`${n}x de ${BRL(parc)}`; else t+=BRL(v);
+  if(n>1){t+=`${n}x de ${BRL(parc)} (total ${BRL(parc*n)})`;if(ini>1)t+=` · começa na ${ini}/${n}, lança ${n-ini+1} parcela(s)`;} else t+=BRL(v);
   if(div)t+=` → ${esc($('l-pessoa').value)} ${BRL(cada)} + ${esc($('l-pessoa2').value)} ${BRL(cada)}`;
   if(modo==='F')t+=' · todo mês (permanente)';
   el.innerHTML=t;
@@ -382,13 +409,15 @@ function lancar(){
     if($('l-div').checked&&!p2)return alert('Cadastre outra pessoa em Ajustes para dividir.');
     const quem=p2?[p,p2]:[p];
     // centavos: primeira parcela absorve diferença
-    const base=Math.floor(v/n*100)/100, sobra=r2(v-base*n);
-    for(let i=0;i<tot;i++){
-      const vp=n>1?(i===0?r2(base+sobra):base):v;
-      const lab=n>1?` (${i+1}/${n})`:'';
+    const ini=n>1?(+$('l-pini').value||1):1, porParc=n>1&&vmodo==='P';
+    const base=porParc?v:Math.floor(v/n*100)/100, sobra=porParc?0:r2(v-base*n);
+    for(let i=0;i<=tot-ini;i++){
+      const k1=ini+i;
+      const vp=n>1?(k1===1?r2(base+sobra):base):v;
+      const lab=n>1?` (${k1}/${n})`:'';
       quem.forEach((pp,k)=>{
         let vv=p2?(k===0?Math.ceil(vp*50)/100:r2(vp-Math.ceil(vp*50)/100)):vp;
-        novos.push({id:uid(),g,t:'D',p:pp,c,pag,desc:desc+lab,v:r2(vv),d,venc:addMes(venc,i),fixa,ok:i===0?$('l-pago').checked:false,div:p2?(k===0?p2:p):'',parc:n>1?`${i+1}/${n}`:''});
+        novos.push({id:uid(),g,t:'D',p:pp,c,pag,desc:desc+lab,v:r2(vv),d,venc:addMes(venc,i),fixa,ok:i===0?$('l-pago').checked:false,div:p2?(k===0?p2:p):'',parc:n>1?`${k1}/${n}`:''});
       });
     }
   }
@@ -426,7 +455,7 @@ function renderHist(){
       <div class="d">${l.t==='R'?'⬆️ ':''}${esc(l.desc||l.c)}</div>
       <div class="v ${l.t==='R'?'pos':''}">${l.t==='R'?'+':''}${BRL(l.v)}</div>
       <div class="m">${l.t==='D'?`Compra ${fmtD(l.d)} · Vence ${fmtD(l.venc)}`:`Recebimento ${fmtD(l.d)}`}<br>
-        <span class="chip">👤 ${esc(l.p)}</span><span class="chip ${l.t==='R'?'r':''}">${esc(l.c)}</span>${l.pag?`<span class="chip">${esc(l.pag)}</span>`:''}${l.fixa?'<span class="chip f">fixa</span>':l.parc?'<span class="chip">parcelada</span>':'<span class="chip">única</span>'}${l.div?`<span class="chip">½ com ${esc(l.div)}</span>`:''}${st}</div>
+        ${chipC('p',l.p,'👤 ')}${chipC('c',l.c)}${l.pag?chipC('pag',l.pag):''}${l.fixa?'<span class="chip f">fixa</span>':l.parc?`<span class="chip">parcelada ${l.parc}</span>`:'<span class="chip">única</span>'}${l.div?chipC('p',l.div,'½ com '):''}${st}</div>
       <div class="acts">
         <button data-tog="${l.id}">${l.ok?'↩️ Desfazer':(l.t==='D'?'✓ Pagar':'✓ Recebido')}</button>
         <button data-cal="${l.id}">📅</button>
@@ -468,13 +497,13 @@ function salvarEdit(todos){
 
 /* ---------- CONFIG ---------- */
 function renderCfg(){
-  $('c-pessoas').innerHTML=D.pessoas.map((p,i)=>`<div class="tagrow"><input data-pes="${i}" value="${esc(p)}">${i?`<button class="btn sm danger" data-rpes="${i}">✕</button>`:''}</div>`).join('');
-  $('c-pags').innerHTML=D.pags.map((p,i)=>`<div class="tagrow"><input data-pag="${i}" value="${esc(p.n)}"><label class="check" style="margin:0;white-space:nowrap"><input type="checkbox" data-cred="${i}" ${p.cred?'checked':''}> crédito</label><button class="btn sm danger" data-rpag="${i}">✕</button></div>`).join('');
-  $('c-catsd').innerHTML=D.catsD.map((c,i)=>`<div class="tagrow"><input data-catd="${i}" value="${esc(c.n)}"><input type="number" step="0.01" style="max-width:110px" data-lim="${i}" value="${c.lim}"><button class="btn sm danger" data-rcatd="${i}">✕</button></div>`).join('');
-  $('c-catsr').innerHTML=D.catsR.map((c,i)=>`<div class="tagrow"><input data-catr="${i}" value="${esc(c)}"><button class="btn sm danger" data-rcatr="${i}">✕</button></div>`).join('');
+  $('c-pessoas').innerHTML=D.pessoas.map((p,i)=>`<div class="tagrow">${sw('p',p)}<input data-pes="${i}" value="${esc(p)}">${i?`<button class="btn sm danger" data-rpes="${i}">✕</button>`:''}</div>`).join('');
+  $('c-pags').innerHTML=D.pags.map((p,i)=>`<div class="tagrow">${sw('pag',p.n)}<input data-pag="${i}" value="${esc(p.n)}"><label class="check" style="margin:0;white-space:nowrap"><input type="checkbox" data-cred="${i}" ${p.cred?'checked':''}> crédito</label><button class="btn sm danger" data-rpag="${i}">✕</button></div>`).join('');
+  $('c-catsd').innerHTML=D.catsD.map((c,i)=>`<div class="tagrow">${sw('c',c.n)}<input data-catd="${i}" value="${esc(c.n)}"><input type="number" step="0.01" style="max-width:110px" data-lim="${i}" value="${c.lim}"><button class="btn sm danger" data-rcatd="${i}">✕</button></div>`).join('');
+  $('c-catsr').innerHTML=D.catsR.map((c,i)=>`<div class="tagrow">${sw('c',c)}<input data-catr="${i}" value="${esc(c)}"><button class="btn sm danger" data-rcatr="${i}">✕</button></div>`).join('');
   $('c-dias').value=D.dias;
 }
-function renomear(campo,antigo,novo){if(antigo!==novo)D.lanc.forEach(l=>{if(l[campo]===antigo)l[campo]=novo;if(campo==='p'&&l.div===antigo)l.div=novo;});}
+function renomear(campo,antigo,novo){if(antigo!==novo){const m=D.cores[campo];if(m&&m[antigo]){m[novo]=m[antigo];delete m[antigo];}}if(antigo!==novo)D.lanc.forEach(l=>{if(l[campo]===antigo)l[campo]=novo;if(campo==='p'&&l.div===antigo)l.div=novo;});}
 
 /* ---------- EVENTOS ---------- */
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
@@ -488,10 +517,18 @@ $('l-pag').onchange=updForm;$('l-div').onchange=updForm;$('l-parc').onchange=pre
 $('l-pessoa').onchange=()=>{fillSelects();preview();};
 $('l-data').onchange=()=>{if(!$('l-venc').value)$('l-venc').value=$('l-data').value;};
 $('l-add').onclick=lancar;
+document.querySelectorAll('#vmodo-seg button').forEach(b=>b.onclick=()=>setVmodo(b.dataset.v));
+$('l-parc').addEventListener('change',()=>{fillPini();preview();});$('l-pini').onchange=preview;
+function abrirCor(k,n){corAlvo={k,n};const at=corDe(k,n);$('cor-tit').textContent='Cor de: '+n;$('cor-livre').value=at.length===7?at:'#000000';
+  $('cor-pal').innerHTML=PAL.map(c=>`<button data-pc="${c}" class="${c===at?'on':''}" style="background:${c}"></button>`).join('');$('mcor').classList.add('on');}
+$('cor-pal').onclick=e=>{const b=e.target.closest('[data-pc]');if(!b)return;$('cor-livre').value=b.dataset.pc;document.querySelectorAll('#cor-pal button').forEach(x=>x.classList.toggle('on',x===b));};
+$('cor-ok').onclick=()=>{if(corAlvo){D.cores[corAlvo.k][corAlvo.n]=$('cor-livre').value;save();}$('mcor').classList.remove('on');render();toast('Cor salva ✔');};
+$('cor-cancel').onclick=()=>$('mcor').classList.remove('on');
 ['f-tipo','f-fixa','f-pessoa','f-pag','f-cat'].forEach(id=>$(id).onchange=renderHist);
 
 document.addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;const ds=t.dataset;
+  if(ds.cor){abrirCor(ds.cor,ds.cn);return;}
   if(ds.pay||ds.tog){const l=D.lanc.find(x=>x.id===(ds.pay||ds.tog));if(l){l.ok=ds.pay?true:!l.ok;save();render();toast(l.ok?'Marcado ✔':'Desmarcado');}}
   else if(ds.cal){const l=D.lanc.find(x=>x.id===ds.cal);if(l)ics([l]);}
   else if(ds.edit)abrirEdit(ds.edit);
