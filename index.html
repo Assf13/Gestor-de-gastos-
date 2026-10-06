@@ -204,7 +204,17 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
     <div><label id="e-ldata">Data da compra</label><input type="date" id="e-data"></div>
     <div id="e-bv"><label>Vencimento</label><input type="date" id="e-venc"></div>
   </div>
-  <label class="check"><input type="checkbox" id="e-fixa"> Fixa</label>
+  <label>Modalidade</label>
+  <div class="seg" id="e-modo-seg"><button data-v="U">Única</button><button data-v="P">Parcelada</button><button data-v="F">Fixa</button></div>
+  <div id="e-bparc" class="hide">
+    <label>O valor informado é</label>
+    <div class="seg" id="e-vmodo-seg"><button data-v="P" class="on">Valor da parcela</button><button data-v="T">Valor total</button></div>
+    <div class="row2">
+      <div><label>Total de parcelas</label><select id="e-parc"></select></div>
+      <div><label>Parcela atual</label><select id="e-pini"></select></div>
+    </div>
+    <p class="mut small" id="e-pinfo" style="margin-top:6px"></p>
+  </div>
   <label class="check"><input type="checkbox" id="e-status"> <span id="e-lstatus">Paga</span></label>
   <p class="mut small" id="e-grp" style="margin-top:8px"></p>
   <button class="btn" id="e-save">Salvar só este</button>
@@ -465,34 +475,83 @@ function renderHist(){
 }
 
 /* ---------- EDIÇÃO ---------- */
+let eModo='U', eVmodo='P';
+function eFillPini(){const n=+$('e-parc').value||2,v=Math.min(+$('e-pini').value||1,n);$('e-pini').innerHTML=Array.from({length:n},(_,i)=>`<option value="${i+1}"${i+1===v?' selected':''}>${i+1} de ${n}</option>`).join('');}
+function eUpd(){
+  const l=D.lanc.find(x=>x.id===editId);if(!l)return;const isD=l.t==='D';
+  document.querySelectorAll('#e-modo-seg button').forEach(b=>{b.classList.toggle('on',b.dataset.v===eModo);if(b.dataset.v==='P')b.classList.toggle('hide',!isD);});
+  document.querySelectorAll('#e-vmodo-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===eVmodo));
+  $('e-bparc').classList.toggle('hide',!(isD&&eModo==='P'));
+  if(isD&&eModo==='P'){const n=+$('e-parc').value||2,k=+$('e-pini').value||1,v=parseFloat($('e-valor').value)||0;
+    const pp=eVmodo==='P'?v:v/n;
+    $('e-pinfo').textContent=`Parcela ${k} de ${n} — ${n-k?`restam ${n-k} parcela(s) futura(s)`:'última parcela'} · ${fmtV(pp)} por parcela · total ${fmtV(pp*n)}`;}
+}
+const fmtV=v=>'R$ '+(Math.round(v*100)/100).toFixed(2).replace('.',',');
 function abrirEdit(id){
   const l=D.lanc.find(x=>x.id===id);if(!l)return;editId=id;
   const isD=l.t==='D';
   $('e-tit').textContent=isD?'Editar despesa':'Editar receita';
-  $('e-valor').value=l.v;$('e-desc').value=l.desc||'';
+  $('e-valor').value=l.v;$('e-desc').value=(l.desc||'').replace(/ \(\d+\/\d+\)$/,'');
   $('e-pessoa').innerHTML=opt([...new Set([...D.pessoas,l.p])],l.p);
   $('e-cat').innerHTML=opt(isD?D.catsD.map(c=>c.n):D.catsR,l.c);
   $('e-pag').innerHTML=opt(D.pags.map(p=>p.n),l.pag);
   $('e-bd').classList.toggle('hide',!isD);$('e-bv').classList.toggle('hide',!isD);
   $('e-ldata').textContent=isD?'Data da compra':'Data de recebimento';
   $('e-data').value=l.d||'';$('e-venc').value=l.venc||'';
-  $('e-fixa').checked=!!l.fixa;$('e-status').checked=!!l.ok;$('e-lstatus').textContent=isD?'Paga':'Recebida';
+  $('e-status').checked=!!l.ok;$('e-lstatus').textContent=isD?'Paga':'Recebida';
+  eModo=modoDe(l);eVmodo='P';
+  const [k,n]=(l.parc||'1/2').split('/').map(Number);
+  $('e-parc').innerHTML=Array.from({length:59},(_,i)=>`<option value="${i+2}"${i+2===n?' selected':''}>${i+2}x</option>`).join('');
+  $('e-pini').innerHTML='';$('e-pini').innerHTML=`<option value="${k}" selected></option>`;eFillPini();
   const grp=D.lanc.filter(x=>x.g===l.g);
-  $('e-grp').textContent=grp.length>1?`Faz parte de um grupo com ${grp.length} lançamentos (parcelas, divisão ou repetição).`:'';
+  $('e-grp').textContent=grp.length>1?`Faz parte de um grupo com ${grp.length} lançamentos (parcelas, divisão ou repetição). Mudar modalidade, total ou parcela atual refaz os próximos automaticamente.`:'';
   $('e-saveall').classList.toggle('hide',grp.length<2);
-  $('modal').classList.add('on');
+  eUpd();$('modal').classList.add('on');
+}
+/* refaz os lançamentos futuros de uma pessoa do grupo a partir do lançamento âncora */
+function refazSerie(anc,modoN,n,k,valor){
+  const m0=mesDe(anc);
+  D.lanc=D.lanc.filter(x=>!(x.g===anc.g&&x.p===anc.p&&x.id!==anc.id&&mesDe(x)>m0));
+  const desc=(anc.desc||'').replace(/ \(\d+\/\d+\)$/,'');
+  anc.v=r2(valor);
+  if(modoN==='F'){anc.fixa=true;anc.parc='';anc.desc=desc;return;}
+  anc.fixa=false;
+  if(modoN==='U'){anc.parc='';anc.desc=desc;return;}
+  anc.parc=`${k}/${n}`;anc.desc=desc+` (${k}/${n})`;
+  const dt=anc.t==='D'?(anc.venc||anc.d):anc.d;
+  for(let j=k+1;j<=n;j++){const i=j-k;
+    const x={...anc,id:uid(),ok:false,parc:`${j}/${n}`,desc:desc+` (${j}/${n})`};
+    if(anc.t==='D')x.venc=addMes(dt,i);else x.d=addMes(dt,i);
+    D.lanc.push(x);}
 }
 function salvarEdit(todos){
   const l=D.lanc.find(x=>x.id===editId);if(!l)return;
-  const nv={v:r2(parseFloat($('e-valor').value)||0),p:$('e-pessoa').value,c:$('e-cat').value,pag:l.t==='D'?$('e-pag').value:undefined,fixa:$('e-fixa').checked};
-  if(nv.v<=0)return alert('Valor inválido.');
+  const isD=l.t==='D';
+  let v=r2(parseFloat($('e-valor').value)||0);
+  if(v<=0)return alert('Valor inválido.');
+  const n=isD&&eModo==='P'?(+$('e-parc').value||2):1, k=n>1?(+$('e-pini').value||1):1;
+  if(n>1&&eVmodo==='T')v=r2(v/n);
+  const modoAnt=modoDe(l), parcAnt=l.parc||'';
+  const estruturaMudou=eModo!==modoAnt||(eModo==='P'&&parcAnt!==`${k}/${n}`);
+  const pAnt=l.p, nv={p:$('e-pessoa').value,c:$('e-cat').value};if(isD)nv.pag=$('e-pag').value;
   const dDesc=$('e-desc').value.trim();
-  if(todos){ // aplica valor/categoria/pagamento aos próximos do mesmo grupo e mesma pessoa
-    D.lanc.filter(x=>x.g===l.g&&x.p===l.p&&(x.venc||x.d)>=(l.venc||l.d)).forEach(x=>{x.v=nv.v;x.c=nv.c;if(nv.pag)x.pag=nv.pag;x.fixa=nv.fixa;x.p=nv.p;});
+  // campos simples
+  Object.assign(l,nv);l.desc=dDesc;l.d=$('e-data').value||l.d;if(isD)l.venc=$('e-venc').value||l.venc;l.ok=$('e-status').checked;
+  if(!isD)delete l.pag;
+  const m0=mesDe(l);
+  if(todos){ // replica categoria/pagamento/pessoa/valor nos próximos da mesma pessoa
+    D.lanc.filter(x=>x.g===l.g&&x.p===pAnt&&x.id!==l.id&&mesDe(x)>=m0).forEach(x=>{x.c=nv.c;if(nv.pag)x.pag=nv.pag;x.p=nv.p;x.v=v;});
   }
-  Object.assign(l,nv);l.desc=dDesc;l.d=$('e-data').value||l.d;if(l.t==='D')l.venc=$('e-venc').value||l.venc;l.ok=$('e-status').checked;
-  if(l.t==='R')delete l.pag;
-  save();$('modal').classList.remove('on');render();toast('Alterações salvas ✔');
+  if(estruturaMudou){
+    // âncoras: este lançamento + parceiros da divisão no mesmo mês
+    const ancs=[l,...D.lanc.filter(x=>x.g===l.g&&x.id!==l.id&&x.p!==l.p&&mesDe(x)===m0)];
+    ancs.forEach(a=>refazSerie(a,eModo,n,k,a===l?v:(eModo==='P'&&eVmodo==='T'?r2((+a.v)):+a.v)));
+    if(eModo==='F')delete D.fim[l.g];else if(modoAnt==='F')D.fim[l.g]=m0;
+  }else{
+    l.v=v;
+    if(eModo==='P')l.desc=dDesc+` (${l.parc})`;
+  }
+  extender();save();$('modal').classList.remove('on');render();toast('Alterações salvas ✔');
 }
 
 /* ---------- CONFIG ---------- */
@@ -565,6 +624,9 @@ $('c-notif').onclick=async()=>{
   if(r==='granted'){localStorage.removeItem('notif_'+hoje());notificar();toast('Notificações ativadas ✔');}else alert('Permissão negada.');
 };
 $('e-save').onclick=()=>salvarEdit(false);$('e-saveall').onclick=()=>salvarEdit(true);
+document.querySelectorAll('#e-modo-seg button').forEach(b=>b.onclick=()=>{eModo=b.dataset.v;eUpd();});
+document.querySelectorAll('#e-vmodo-seg button').forEach(b=>b.onclick=()=>{eVmodo=b.dataset.v;eUpd();});
+$('e-parc').addEventListener('change',()=>{eFillPini();eUpd();});$('e-pini').onchange=eUpd;$('e-valor').addEventListener('input',eUpd);
 $('e-cancel').onclick=()=>$('modal').classList.remove('on');
 $('modal').onclick=e=>{if(e.target.id==='modal')$('modal').classList.remove('on');};
 
@@ -584,4 +646,3 @@ fillSelects();render();updForm();notificar();
 </script>
 </body>
 </html>
- 
