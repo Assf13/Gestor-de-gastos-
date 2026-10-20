@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Gestor de Gastos</title>
 <style>
+.gaveta summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}.gaveta summary::-webkit-details-marker{display:none}.gaveta summary::after{content:"▾";transition:.2s}.gaveta[open] summary::after{transform:rotate(180deg)}
+.chip.venc{background:#8a0303!important;color:#fff!important;border-color:#8a0303!important}.chip.parc{background:#6b7280!important;color:#fff!important;border-color:#6b7280!important}
+.fatp{display:flex;justify-content:space-between;font-size:12px;padding:2px 0 2px 14px}
 :root{--bg:#0b1220;--panel:#131c2e;--panel2:#1a2740;--line:#24324d;--txt:#e8eef8;--mut:#8fa0bd;--acc:#4f8cff;--pos:#3ecf8e;--neg:#ff6b6b;--warn:#ffc24b;--r:14px}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
@@ -98,7 +101,7 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
   <div class="card"><h3>Fixas x Únicas x Parceladas</h3><div id="fixvar"></div></div>
   <div id="pessoas-resumo"></div>
   <div class="card"><h3>💳 Faturas dos cartões no mês</h3><div id="faturas"></div></div>
-  <div class="card"><h3>Orçamento por categoria (geral)</h3><div id="bars"></div></div>
+  <details class="card gaveta" id="gav-orc"><summary><h3 style="display:inline">Orçamento por categoria (geral)</h3></summary><div id="bars"></div></details>
 </section>
 
 <!-- LANÇAR -->
@@ -330,9 +333,9 @@ function render(){
   $('pessoas-resumo').innerHTML=html;
 
   // faturas
-  const fat=D.pags.filter(p=>p.cred).map(p=>{const it=De.filter(l=>l.pag===p.n);return{n:p.n,v:sum(it),ab:sum(it.filter(l=>!l.ok)),venc:it.map(l=>l.venc).sort()[0]}});
+  const fat=D.pags.filter(p=>p.cred).map(p=>{const it=De.filter(l=>l.pag===p.n);const pp={};it.forEach(l=>pp[l.p]=(pp[l.p]||0)+(+l.v||0));return{n:p.n,pp,v:sum(it),ab:sum(it.filter(l=>!l.ok)),venc:it.map(l=>l.venc).sort()[0]}});
   const vista=sum(De.filter(l=>!isCred(l.pag)));
-  $('faturas').innerHTML=fat.map(f=>`<div class="listrow"><span><span style="color:${corDe('pag',f.n)}">●</span> ${esc(f.n)}${f.venc?`<br><span class="mut small">vence ${fmtD(f.venc)}${f.ab>0?' · a pagar '+BRL(f.ab):' · paga'}</span>`:''}</span><b>${BRL(f.v)}</b></div>`).join('')
+  $('faturas').innerHTML=fat.map(f=>`<div class="listrow"><span><span style="color:${corDe('pag',f.n)}">●</span> ${esc(f.n)}${f.venc?`<br><span class="mut small">vence ${fmtD(f.venc)}${f.ab>0?' · a pagar '+BRL(f.ab):' · paga'}</span>`:''}</span><b>${BRL(f.v)}</b></div>${Object.entries(f.pp).sort((a,b)=>b[1]-a[1]).map(([p,v])=>`<div class="fatp"><span><span style="color:${corDe('p',p)}">👤</span> ${esc(p)}</span><span>${BRL(v)}</span></div>`).join('')}`).join('')
     +`<div class="listrow"><span class="mut">À vista (Pix, débito, dinheiro)</span><b>${BRL(vista)}</b></div>`;
 
   const porCat={};De.forEach(l=>porCat[l.c]=(porCat[l.c]||0)+(+l.v||0));
@@ -459,13 +462,13 @@ function renderHist(){
   const L=filtrados();
   $('h-list').innerHTML=L.length?L.map(l=>{
     let st='';
-    if(l.t==='D'){if(l.ok)st='<span class="chip ok">paga</span>';else{const dd=diasAte(l.venc||l.d);st=dd<0?'<span class="chip late">vencida</span>':dd<=(+D.dias||0)?'<span class="chip soon">vence logo</span>':'<span class="chip">a vencer</span>';}}
+    if(l.t==='D'){if(l.ok)st='<span class="chip ok">paga</span>';else{const dd=diasAte(l.venc||l.d);st=dd<0?'<span class="chip late">vencida</span>':dd<=(+D.dias||0)?'<span class="chip soon">vence logo</span>':'<span class="chip venc">a vencer</span>';}}
     else st=l.ok?'<span class="chip ok">recebido</span>':'<span class="chip">previsto</span>';
     return `<div class="hitem">
       <div class="d">${l.t==='R'?'⬆️ ':''}${esc(l.desc||l.c)}</div>
       <div class="v ${l.t==='R'?'pos':''}">${l.t==='R'?'+':''}${BRL(l.v)}</div>
       <div class="m">${l.t==='D'?`Compra ${fmtD(l.d)} · Vence ${fmtD(l.venc)}`:`Recebimento ${fmtD(l.d)}`}<br>
-        ${chipC('p',l.p,'👤 ')}${chipC('c',l.c)}${l.pag?chipC('pag',l.pag):''}${l.fixa?'<span class="chip f">fixa</span>':l.parc?`<span class="chip">parcelada ${l.parc}</span>`:'<span class="chip">única</span>'}${l.div?chipC('p',l.div,'½ com '):''}${st}</div>
+        ${chipC('p',l.p,'👤 ')}${chipC('c',l.c)}${l.pag?chipC('pag',l.pag):''}${l.fixa?'<span class="chip f">fixa</span>':l.parc?`<span class="chip parc">parcelada ${l.parc}</span>`:'<span class="chip">única</span>'}${l.div?chipC('p',l.div,'½ com '):''}${st}</div>
       <div class="acts">
         <button data-tog="${l.id}">${l.ok?'↩️ Desfazer':(l.t==='D'?'✓ Pagar':'✓ Recebido')}</button>
         <button data-cal="${l.id}">📅</button>
@@ -644,5 +647,6 @@ $('b-del').onclick=()=>{if(confirm('Apagar TODOS os dados?')&&confirm('Tem certe
 $('l-data').value=hoje();$('l-venc').value=hoje();$('l-receb').value=hoje();
 fillSelects();render();updForm();notificar();
 </script>
+<script>(()=>{const g=document.getElementById("gav-orc");g.open=localStorage.getItem("gav_orc")==="1";g.addEventListener("toggle",()=>localStorage.setItem("gav_orc",g.open?"1":"0"))})()</script>
 </body>
 </html>
