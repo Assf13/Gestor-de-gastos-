@@ -267,6 +267,71 @@ if(!D||!Array.isArray(D.lanc)){
   }catch(e){}
   save();
 }
+
+function compartilharDespesas(nome){
+  const L = doMes().filter(l=>l.p===nome && l.t==="D");
+  if(!L.length){
+    toast("Sem despesas para " + nome + " neste mês.");
+    return;
+  }
+
+  // Agrupar por categoria
+  const grupos = {};
+  L.forEach(l=>{
+    const cat = l.c || "Sem categoria";
+    if(!grupos[cat]) grupos[cat] = [];
+    grupos[cat].push(l);
+  });
+
+  // Ordenar categorias pelo maior valor total gasto
+  const catsOrd = Object.keys(grupos).sort((a,b)=>sum(grupos[b]) - sum(grupos[a]));
+  const total = sum(L);
+
+  const [ano, mes] = (mesSel||hoje().slice(0,7)).split("-");
+  const mesesNomes = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const mesExt = (mesesNomes[parseInt(mes,10)-1] || mes) + "/" + ano;
+
+  let texto = `📊 *Despesas detalhadas de ${nome} — ${mesExt}*\n\n`;
+
+  catsOrd.forEach(cat=>{
+    const itens = grupos[cat];
+    itens.sort((a,b)=>String(a.d||"").localeCompare(String(b.d||"")));
+    const sub = sum(itens);
+    texto += `📁 *${cat}* (Subtotal: ${BRL(sub)})\n`;
+    itens.forEach(l=>{
+      const dia = l.d ? l.d.slice(8,10) + "/" + l.d.slice(5,7) : "—";
+      const desc = l.desc || l.c || "Despesa";
+      const pag = l.pag ? ` [${l.pag}]` : "";
+      const parc = l.parc ? ` (${l.parc})` : (l.fixa ? " (fixa)" : "");
+      texto += `  • ${dia} — ${desc}${parc}: ${BRL(l.v)}${pag}\n`;
+    });
+    texto += `\n`;
+  });
+
+  texto += `----------------------------------------\n`;
+  texto += `*TOTAL GERAL:* ${BRL(total)}`;
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(texto).catch(()=>{});
+  }
+
+  const url = "https://api.whatsapp.com/send?text=" + encodeURIComponent(texto);
+
+  if(navigator.share){
+    navigator.share({
+      title: `Despesas detalhadas de ${nome} (${mesExt})`,
+      text: texto
+    }).catch(err=>{
+      if(err.name !== "AbortError"){
+        window.open(url, "_blank");
+      }
+    });
+  } else {
+    window.open(url, "_blank");
+  }
+  toast("📋 Despesas detalhadas de " + nome + " preparadas!");
+}
+
 function save(){localStorage.setItem(KEY,JSON.stringify(D));}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2300);}
 
@@ -325,7 +390,8 @@ function render(){
     const g=sum(lp.filter(l=>l.t==='D')), r=sum(lp.filter(l=>l.t==='R'&&l.ok));
     const cats={}; lp.filter(l=>l.t==='D').forEach(l=>cats[l.c]=(cats[l.c]||0)+(+l.v||0));
     const ord=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
-    return `<div class="card pessoa"><div class="ph"><b style="color:${corDe('p',p)}">👤 ${esc(p)}</b><b class="neg">${BRL(g)}</b></div>
+    const btnShare = g > 0 ? `<button class="btn sm" onclick="compartilharDespesas('${esc(p)}')" title="Compartilhar despesas no WhatsApp" style="padding:4px 8px;font-size:11px;border-radius:8px;line-height:1;display:inline-flex;align-items:center;gap:4px;background:#25d366;color:#fff;border:none;font-weight:600">📤 WhatsApp</button>` : "";
+    return `<div class="card pessoa"><div class="ph"><b style="color:${corDe('p',p)}">👤 ${esc(p)}</b><div style="display:flex;align-items:center;gap:8px;"><b class="neg">${BRL(g)}</b>${btnShare}</div></div>
       <div class="mini"><span>Recebeu <b class="pos">${BRL(r)}</b></span><span>Saldo <b class="${r-g>=0?'pos':'neg'}">${BRL(r-g)}</b></span></div>
       ${ord.length?ord.map(([c,v])=>{const w=g>0?v/g*100:0;return `<div class="bar-row"><div class="top"><span><span style="color:${corDe('c',c)}">●</span> ${esc(c)}</span><span class="r">${BRL(v)} · ${Math.round(w)}%</span></div><div class="bar"><i style="width:${w}%;background:${corDe('c',c)}"></i></div></div>`}).join(''):'<div class="mut small">Sem despesas neste mês.</div>'}
     </div>`;
