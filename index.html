@@ -322,7 +322,7 @@ function render(){
   const nomes=[...new Set([...D.pessoas,...L.map(l=>l.p)])];
   const html=nomes.map(p=>{
     const lp=L.filter(l=>l.p===p); if(!lp.length&&p!==D.pessoas[0])return '';
-    const g=sum(lp.filter(l=>l.t==='D')), r=sum(lp.filter(l=>l.t==='R'));
+    const g=sum(lp.filter(l=>l.t==='D')), r=sum(lp.filter(l=>l.t==='R'&&l.ok));
     const cats={}; lp.filter(l=>l.t==='D').forEach(l=>cats[l.c]=(cats[l.c]||0)+(+l.v||0));
     const ord=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
     return `<div class="card pessoa"><div class="ph"><b style="color:${corDe('p',p)}">👤 ${esc(p)}</b><b class="neg">${BRL(g)}</b></div>
