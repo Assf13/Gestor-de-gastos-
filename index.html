@@ -366,14 +366,17 @@ function diasAte(s){const a=new Date(s+'T00:00:00'),b=new Date(hoje()+'T00:00:00
 /* ---------- RESUMO ---------- */
 function render(){
   $('mes').value=mesSel;
-  const L=doMes(), R=L.filter(l=>l.t==='R'), De=L.filter(l=>l.t==='D');
-  const tr=sum(R), td=sum(De), saldo=tr-td;
-  const aPagar=sum(De.filter(l=>!l.ok));
+  const L=doMes();
+  const titular = D.pessoas.find(p=>p.toLowerCase()==='arthur') || D.pessoas[0] || 'Arthur';
+  const L_art = L.filter(l=>l.p===titular);
+  const R_art = L_art.filter(l=>l.t==='R'), De_art = L_art.filter(l=>l.t==='D');
+  const tr=sum(R_art), td=sum(De_art), saldo=tr-td;
+  const aPagar=sum(De_art.filter(l=>!l.ok));
   $('kpis').innerHTML=[['Receitas',BRL(tr),'pos'],['Despesas',BRL(td),'neg'],['Saldo do mês',BRL(saldo),saldo>=0?'pos':'neg'],['Ainda a pagar',BRL(aPagar),aPagar>0?'warnc':'']]
     .map(([k,v,c])=>`<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
 
   extender();
-  const rf=sum(R.filter(l=>l.fixa)), rv=tr-rf, df=sum(De.filter(l=>l.fixa)), dp=sum(De.filter(l=>modoDe(l)==='P')), du=td-df-dp;
+  const rf=sum(R_art.filter(l=>l.fixa)), rv=tr-rf, df=sum(De_art.filter(l=>l.fixa)), dp=sum(De_art.filter(l=>modoDe(l)==='P')), du=td-df-dp;
   const pc=rf>0?Math.round(df/rf*100):0;
   $('fixvar').innerHTML=`
     <div class="listrow"><span>Receitas fixas</span><b class="pos">${BRL(rf)}</b></div>
@@ -398,6 +401,7 @@ function render(){
   }).join('');
   $('pessoas-resumo').innerHTML=html;
 
+  const De = L.filter(l=>l.t==='D');
   // faturas
   const fat=D.pags.filter(p=>p.cred).map(p=>{const it=De.filter(l=>l.pag===p.n);const pp={};it.forEach(l=>pp[l.p]=(pp[l.p]||0)+(+l.v||0));return{n:p.n,pp,v:sum(it),ab:sum(it.filter(l=>!l.ok)),venc:it.map(l=>l.venc).sort()[0]}});
   const vista=sum(De.filter(l=>!isCred(l.pag)));
