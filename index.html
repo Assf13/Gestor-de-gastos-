@@ -54,7 +54,7 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
 .pessoa .ph b{font-size:16px}
 .mini{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-bottom:10px}
 .hist{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
-.hist .scroll{max-height:55vh;overflow:auto;-webkit-overflow-scrolling:touch}
+.hist .scroll{max-height:70vh;overflow:auto;-webkit-overflow-scrolling:touch}
 .hitem{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:11px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
 .hitem:last-child{border-bottom:0}
 .hitem .d{font-size:14px;font-weight:600}
@@ -152,16 +152,27 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
 
 <!-- HISTÓRICO -->
 <section id="v-hist">
-  <div class="card">
-    <div class="row2">
-      <div><label>Tipo</label><select id="f-tipo"><option value="">Todos</option><option value="D">Despesas</option><option value="R">Receitas</option></select></div>
-      <div><label>Modalidade</label><select id="f-fixa"><option value="">Todas</option><option value="F">Fixas</option><option value="U">Únicas</option><option value="P">Parceladas</option></select></div>
-      <div><label>Pessoa</label><select id="f-pessoa"></select></div>
-      <div><label>Pagamento</label><select id="f-pag"></select></div>
+  <details class="card gaveta" id="gav-filtros">
+    <summary style="font-weight:600;display:flex;justify-content:space-between;align-items:center;user-select:none;cursor:pointer">
+      <span style="display:flex;align-items:center;gap:8px">
+        <span>🔍 Filtros</span>
+        <span id="f-badge" style="display:none;font-size:11px;padding:2px 8px;border-radius:10px;background:var(--acc);color:#fff;font-weight:600"></span>
+      </span>
+    </summary>
+    <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+      <div class="row2">
+        <div><label>Tipo</label><select id="f-tipo"><option value="">Todos</option><option value="D">Despesas</option><option value="R">Receitas</option></select></div>
+        <div><label>Modalidade</label><select id="f-fixa"><option value="">Todas</option><option value="F">Fixas</option><option value="U">Únicas</option><option value="P">Parceladas</option></select></div>
+        <div><label>Pessoa</label><select id="f-pessoa"></select></div>
+        <div><label>Pagamento</label><select id="f-pag"></select></div>
+      </div>
+      <label>Categoria</label><select id="f-cat"></select>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn sec" id="h-csv" style="flex:1">Exportar CSV do mês</button>
+        <button class="btn sec" id="f-limpar" style="display:none;white-space:nowrap">Limpar filtros</button>
+      </div>
     </div>
-    <label>Categoria</label><select id="f-cat"></select>
-    <button class="btn sec" id="h-csv">Exportar CSV do mês</button>
-  </div>
+  </details>
   <div class="hist"><div class="scroll" id="h-list"></div></div>
 </section>
 
@@ -523,12 +534,33 @@ function ics(lista){
 function baixar(blob,nome){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
 
 /* ---------- HISTÓRICO ---------- */
+function updFiltrosBadge(){
+  const fIds=['f-tipo','f-fixa','f-pessoa','f-pag','f-cat'];
+  const ativos=fIds.filter(id=>{const el=$(id);return el&&el.value!==''}).length;
+  const b=$('f-badge');
+  if(b){
+    if(ativos>0){
+      b.textContent=`${ativos} ${ativos===1?'ativo':'ativos'}`;
+      b.style.display='inline-block';
+    }else{
+      b.textContent='';
+      b.style.display='none';
+    }
+  }
+  const clr=$('f-limpar');
+  if(clr)clr.style.display=ativos>0?'inline-block':'none';
+}
 function filtrados(){
   const ft=$('f-tipo').value,ff=$('f-fixa').value,fp=$('f-pessoa').value,fg=$('f-pag').value,fc=$('f-cat').value;
   return doMes().filter(l=>(!ft||l.t===ft)&&(!ff||modoDe(l)===ff)&&(!fp||l.p===fp)&&(!fg||l.pag===fg)&&(!fc||l.c===fc))
-    .sort((a,b)=>String(mesDe(a)&&(a.venc||a.d)).localeCompare(String(b.venc||b.d)));
+    .sort((a,b)=>{
+      const da=a.d||a.venc||'', db=b.d||b.venc||'';
+      const c=db.localeCompare(da);
+      return c!==0?c:(b.id||'').localeCompare(a.id||'');
+    });
 }
 function renderHist(){
+  updFiltrosBadge();
   const L=filtrados();
   $('h-list').innerHTML=L.length?L.map(l=>{
     let st='';
@@ -657,6 +689,7 @@ $('cor-pal').onclick=e=>{const b=e.target.closest('[data-pc]');if(!b)return;$('c
 $('cor-ok').onclick=()=>{if(corAlvo){D.cores[corAlvo.k][corAlvo.n]=$('cor-livre').value;save();}$('mcor').classList.remove('on');render();toast('Cor salva ✔');};
 $('cor-cancel').onclick=()=>$('mcor').classList.remove('on');
 ['f-tipo','f-fixa','f-pessoa','f-pag','f-cat'].forEach(id=>$(id).onchange=renderHist);
+if($('f-limpar'))$('f-limpar').onclick=()=>{['f-tipo','f-fixa','f-pessoa','f-pag','f-cat'].forEach(id=>{if($(id))$(id).value='';});renderHist();};
 
 document.addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;const ds=t.dataset;
