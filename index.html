@@ -98,7 +98,7 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
 <section id="v-resumo" class="on">
   <div id="alertas"></div>
   <div class="kpis" id="kpis"></div>
-  <div class="card"><h3>Fixas x Únicas x Parceladas</h3><div id="fixvar"></div></div>
+  <div class="card"><h3>Fixas x Únicas</h3><div id="fixvar"></div></div>
   <div id="pessoas-resumo"></div>
   <div class="card"><h3>💳 Faturas dos cartões no mês</h3><div id="faturas"></div></div>
   <details class="card gaveta" id="gav-orc"><summary><h3 style="display:inline">Orçamento por categoria (geral)</h3></summary><div id="bars"></div></details>
@@ -107,7 +107,13 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
 <!-- LANÇAR -->
 <section id="v-lancar">
   <div class="card">
-    <div class="seg" id="tipo-seg"><button data-v="D" class="on">Despesa</button><button data-v="R">Receita</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="seg" id="tipo-seg" style="margin:0;flex:1"><button data-v="D" class="on">Despesa</button><button data-v="R">Receita</button></div>
+      <button id="btn-voz" type="button" style="margin-left:8px;padding:9px 13px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;transition:all .2s">
+        <span id="voz-ic">🎙️</span><span id="voz-txt">Falar</span>
+      </button>
+    </div>
+    <div id="voz-box" class="hide" style="margin-bottom:12px;padding:10px 14px;border-radius:10px;font-size:13px;line-height:1.4"></div>
     <label id="l-vlab">Valor (R$)</label><input type="number" step="0.01" inputmode="decimal" id="l-valor" placeholder="0,00">
     <div class="row2">
       <div><label>Pessoa</label><select id="l-pessoa"></select></div>
@@ -160,6 +166,8 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
       </span>
     </summary>
     <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+      <label style="display:block;margin-bottom:4px;font-size:12px;color:var(--mut)">Buscar lançamento</label>
+      <input type="search" id="f-busca" placeholder="🔍 Digite a descrição, estabelecimento..." style="width:100%;margin-bottom:10px">
       <div class="row2">
         <div><label>Tipo</label><select id="f-tipo"><option value="">Todos</option><option value="D">Despesas</option><option value="R">Receitas</option></select></div>
         <div><label>Modalidade</label><select id="f-fixa"><option value="">Todas</option><option value="F">Fixas</option><option value="U">Únicas</option><option value="P">Parceladas</option></select></div>
@@ -180,7 +188,7 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
 <section id="v-cfg">
   <div class="card"><h3>👤 Pessoas</h3><div id="c-pessoas"></div>
     <div class="tagrow"><input id="n-pessoa" placeholder="Nova pessoa"><button class="btn sm" id="a-pessoa">Adicionar</button></div></div>
-  <div class="card"><h3>💳 Formas de pagamento</h3><p class="mut small">Marque ✓ crédito para permitir parcelamento e aparecer em "Faturas".</p><div id="c-pags"></div>
+  <div class="card"><h3>💳 Formas de pagamento</h3><p class="mut small">Marque ✓ crédito para faturas, parcelamento e vencimento automático pelo dia de fechamento.</p><div id="c-pags"></div>
     <div class="tagrow"><input id="n-pag" placeholder="Nova forma"><button class="btn sm" id="a-pag">Adicionar</button></div></div>
   <div class="card"><h3>Categorias de despesa e limite mensal</h3><div id="c-catsd"></div>
     <div class="tagrow"><input id="n-catd" placeholder="Nova categoria"><button class="btn sm" id="a-catd">Adicionar</button></div></div>
@@ -260,13 +268,20 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
 const DEF={
   pessoas:['Arthur'],
-  pags:[{n:'Cartão C6 Crédito',cred:true},{n:'Cartão Nu Bank',cred:true},{n:'Cartão Mercado Pago',cred:true},{n:'Cartão C6 Débito',cred:false},{n:'Pix',cred:false},{n:'Dinheiro',cred:false}],
+  pags:[{n:'Cartão C6 Crédito',cred:true,fech:19,venc:25},{n:'Cartão Nu Bank',cred:true,fech:2,venc:9},{n:'Cartão Mercado Pago',cred:true,fech:15,venc:20},{n:'Cartão C6 Débito',cred:false},{n:'Pix',cred:false},{n:'Dinheiro',cred:false}],
   catsD:[{n:'Pensão alimentícia',lim:2400},{n:'Moto',lim:1000},{n:'Alimentação',lim:600},{n:'Moradia',lim:600},{n:'Lazer',lim:250},{n:'Serviços',lim:130},{n:'Investimento',lim:200},{n:'Uber',lim:60},{n:'Outros',lim:900}],
   catsR:['Salário','Quinzena','Ganho Extra','Auxílio Combustível'],
   dias:3, lanc:[]
 };
 let D;
 try{D=JSON.parse(localStorage.getItem(KEY));}catch(e){D=null}
+if(D&&Array.isArray(D.pags)){
+  D.pags.forEach(p=>{
+    if(p.n==='Cartão C6 Crédito'){p.cred=true;if(!p.fech)p.fech=19;if(!p.venc)p.venc=25;}
+    else if(p.n==='Cartão Nu Bank'){p.cred=true;if(!p.fech)p.fech=2;if(!p.venc)p.venc=9;}
+    else if(p.n==='Cartão Mercado Pago'){p.cred=true;if(!p.fech)p.fech=15;if(!p.venc)p.venc=20;}
+  });
+}
 if(!D||!Array.isArray(D.lanc)){
   D=JSON.parse(JSON.stringify(DEF));
   try{ // migra dados da versão anterior
@@ -383,8 +398,18 @@ function render(){
   const R_art = L_art.filter(l=>l.t==='R'), De_art = L_art.filter(l=>l.t==='D');
   const tr=sum(R_art), td=sum(De_art), saldo=tr-td;
   const aPagar=sum(De_art.filter(l=>!l.ok));
-  $('kpis').innerHTML=[['Receitas',BRL(tr),'pos'],['Despesas',BRL(td),'neg'],['Saldo do mês',BRL(saldo),saldo>=0?'pos':'neg'],['Ainda a pagar',BRL(aPagar),aPagar>0?'warnc':'']]
-    .map(([k,v,c])=>`<div class="kpi"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
+  const rRecebido=sum(R_art.filter(l=>l.ok));
+  const rPendente=sum(R_art.filter(l=>!l.ok));
+  $('kpis').innerHTML=`
+    <div class="kpi">
+      <div class="k">Receitas</div>
+      <div class="v pos">${BRL(tr)}</div>
+      <div class="mut small" style="margin-top:4px;font-size:11px;line-height:1.3">Recebido: ${BRL(rRecebido)} | A receber: ${BRL(rPendente)}</div>
+    </div>
+    <div class="kpi"><div class="k">Despesas</div><div class="v neg">${BRL(td)}</div></div>
+    <div class="kpi"><div class="k">Saldo do mês</div><div class="v ${saldo>=0?'pos':'neg'}">${BRL(saldo)}</div></div>
+    <div class="kpi"><div class="k">Ainda a pagar</div><div class="v ${aPagar>0?'warnc':''}">${BRL(aPagar)}</div></div>
+  `;
 
   extender();
   const rf=sum(R_art.filter(l=>l.fixa)), rv=tr-rf, df=sum(De_art.filter(l=>l.fixa)), dp=sum(De_art.filter(l=>modoDe(l)==='P')), du=td-df-dp;
@@ -394,7 +419,6 @@ function render(){
     <div class="listrow"><span>Receitas únicas</span><b class="pos">${BRL(rv)}</b></div>
     <div class="listrow"><span>Despesas fixas</span><b class="neg">${BRL(df)}</b></div>
     <div class="listrow"><span>Despesas únicas</span><b class="neg">${BRL(du)}</b></div>
-    <div class="listrow"><span>Parcelas do mês</span><b class="neg">${BRL(dp)}</b></div>
     ${rf>0?`<div class="bar-row" style="margin-top:10px"><div class="top"><span>Despesas fixas consomem</span><span class="r">${pc}% da receita fixa</span></div><div class="bar"><i class="${pc>100?'over':pc>=80?'warn':''}" style="width:${Math.min(100,pc)}%"></i></div></div>`:''}`;
 
   // por pessoa
@@ -406,7 +430,7 @@ function render(){
     const ord=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
     const btnShare = g > 0 ? `<button class="btn sm" onclick="compartilharDespesas('${esc(p)}')" title="Compartilhar despesas no WhatsApp" style="padding:4px 8px;font-size:11px;border-radius:8px;line-height:1;display:inline-flex;align-items:center;gap:4px;background:#25d366;color:#fff;border:none;font-weight:600">📤 WhatsApp</button>` : "";
     return `<div class="card pessoa"><div class="ph"><b style="color:${corDe('p',p)}">👤 ${esc(p)}</b><div style="display:flex;align-items:center;gap:8px;"><b class="neg">${BRL(g)}</b>${btnShare}</div></div>
-      <div class="mini"><span>Recebeu <b class="pos">${BRL(r)}</b></span><span>Saldo <b class="${r-g>=0?'pos':'neg'}">${BRL(r-g)}</b></span></div>
+      <div class="mini"><span>Recebido <b class="pos">${BRL(r)}</b></span><span>Saldo <b class="${r-g>=0?'pos':'neg'}">${BRL(r-g)}</b></span></div>
       ${ord.length?ord.map(([c,v])=>{const w=g>0?v/g*100:0;return `<div class="bar-row"><div class="top"><span><span style="color:${corDe('c',c)}">●</span> ${esc(c)}</span><span class="r">${BRL(v)} · ${Math.round(w)}%</span></div><div class="bar"><i style="width:${w}%;background:${corDe('c',c)}"></i></div></div>`}).join(''):'<div class="mut small">Sem despesas neste mês.</div>'}
     </div>`;
   }).join('');
@@ -466,8 +490,262 @@ function setTipo(v){tipo=v;document.querySelectorAll('#tipo-seg button').forEach
   $('tipo-seg').classList.toggle('rec',v==='R');$('bloco-d').classList.toggle('hide',v!=='D');$('bloco-r').classList.toggle('hide',v!=='R');
   $('l-cat').value='';fillSelects();updForm();}
 function setModo(v){modo=v;document.querySelectorAll('#fixa-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));updForm();}
-function updForm(){
-  const cred=isCred($('l-pag').value);
+
+function calcVencCartao(pagNome, dataCompraIso){
+  const pag = D.pags.find(p=>p.n===pagNome);
+  if(!pag||!pag.cred||!pag.fech||!pag.venc) return dataCompraIso;
+  const [y, m, d] = (dataCompraIso||hoje()).split('-').map(Number);
+  const diaFech = +pag.fech, diaVenc = +pag.venc;
+  let targetM = m;
+  if(d <= diaFech){
+    targetM = diaVenc > diaFech ? m : m + 1;
+  } else {
+    targetM = diaVenc > diaFech ? m + 1 : m + 2;
+  }
+  const targetY = y + Math.floor((targetM - 1) / 12);
+  const normM = ((targetM - 1) % 12) + 1;
+  const lastD = new Date(targetY, normM, 0).getDate();
+  const realD = Math.min(diaVenc, lastD);
+  return `${targetY}-${pad(normM)}-${pad(realD)}`;
+}
+function autoPreencherVencimento(){
+  if(tipo!=='D')return;
+  const pag=$('l-pag').value;
+  const d=$('l-data').value||hoje();
+  if(isCred(pag)){
+    $('l-venc').value=calcVencCartao(pag, d);
+  }else{
+    $('l-venc').value=d;
+  }
+}
+
+/* ---------- LANÇAMENTO POR VOZ ---------- */
+let recVoz = null, ouvindoVoz = false;
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function toggleVoz(){
+  if(!SpeechRec){
+    return alert('Reconhecimento de voz não é suportado pelo seu navegador atual. No iPhone, use o Safari.');
+  }
+  if(ouvindoVoz && recVoz){
+    try{ recVoz.stop(); }catch(e){}
+    return;
+  }
+  try{
+    recVoz = new SpeechRec();
+    recVoz.lang = 'pt-BR';
+    recVoz.continuous = false;
+    recVoz.interimResults = false;
+
+    recVoz.onstart = () => {
+      ouvindoVoz = true;
+      const btn = $('btn-voz');
+      if(btn){
+        btn.style.background = '#8a0303';
+        btn.style.borderColor = '#ff4d4d';
+      }
+      $('voz-txt').textContent = 'Ouvindo...';
+      const b = $('voz-box');
+      b.className = '';
+      b.style.background = 'rgba(239,68,68,0.15)';
+      b.style.border = '1px solid #ef4444';
+      b.innerHTML = '🎙️ <b>Pode falar...</b> (ex.: <i>"Padaria 35 reais no Pix"</i> ou <i>"Gasolina 120 no Nu Bank"</i>)';
+    };
+
+    recVoz.onresult = (e) => {
+      const fala = e.results[0][0].transcript;
+      processarAudio(fala);
+    };
+
+    recVoz.onerror = (e) => {
+      const b = $('voz-box');
+      b.className = '';
+      b.style.background = 'rgba(255,194,75,0.15)';
+      b.style.border = '1px solid var(--warn)';
+      if(e.error==='not-allowed'){
+        b.innerHTML = '⚠️ Permissão de microfone negada. Ative o microfone nos ajustes do navegador.';
+      }else if(e.error==='no-speech'){
+        b.innerHTML = '⚠️ Nenhuma fala detectada. Toque em 🎙️ Falar para tentar de novo.';
+      }else{
+        b.innerHTML = `⚠️ Reconhecimento não concluído (${e.error}). Toque em 🎙️ Falar para tentar de novo.`;
+      }
+    };
+
+    recVoz.onend = () => {
+      ouvindoVoz = false;
+      const btn = $('btn-voz');
+      if(btn){
+        btn.style.background = 'var(--panel2)';
+        btn.style.borderColor = 'var(--line)';
+      }
+      $('voz-txt').textContent = 'Falar';
+    };
+
+    recVoz.start();
+  }catch(err){
+    console.error(err);
+    alert('Erro ao iniciar reconhecimento de voz: ' + (err.message || err));
+  }
+}
+
+function processarAudio(fala){
+  const txt = fala.toLowerCase().trim();
+
+  // 1. Tipo
+  let novoTipo = 'D';
+  if(/(?:receita|salário|salario|quinzena|ganho|renda)/i.test(txt)){
+    novoTipo = 'R';
+  }
+  if(novoTipo !== tipo) setTipo(novoTipo);
+
+  // 2. Divisão
+  const temDiv = /(?:dividid[oa]|dividir|meio a meio|50\/50|metade)/i.test(txt);
+  $('l-div').checked = temDiv;
+  let p2Nome = '';
+  if(temDiv){
+    for(const p of D.pessoas){
+      if(p.toLowerCase() !== 'arthur' && txt.includes(p.toLowerCase())){
+        p2Nome = p; break;
+      }
+    }
+    if(!p2Nome){
+      const outros = D.pessoas.filter(p=>p !== 'Arthur');
+      if(outros.length) p2Nome = outros[0];
+    }
+  }
+
+  // 3. Pessoa
+  let pessoaDona = 'Arthur';
+  for(const p of D.pessoas){
+    if(p !== 'Arthur' && new RegExp('\b(?:da|de|pra|para|pela)\s+' + p.toLowerCase() + '\b', 'i').test(txt)){
+      pessoaDona = p; break;
+    }else if(p !== 'Arthur' && !temDiv && new RegExp('\b' + p.toLowerCase() + '\b', 'i').test(txt)){
+      pessoaDona = p; break;
+    }
+  }
+  if(D.pessoas.includes(pessoaDona)) $('l-pessoa').value = pessoaDona;
+  fillSelects();
+  if(p2Nome && $('l-pessoa2')) $('l-pessoa2').value = p2Nome;
+
+  // 4. Pagamento
+  let pagEscolhido = '';
+  if(/c6\s*cr[eé]dito|(?:c6.*cr[eé]dito)|cr[eé]dito.*c6/i.test(txt)){
+    pagEscolhido = 'Cartão C6 Crédito';
+  }else if(/c6\s*d[eé]bito|(?:c6.*d[eé]bito)|d[eé]bito.*c6/i.test(txt)){
+    pagEscolhido = 'Cartão C6 Débito';
+  }else if(/nu\s*bank|nubank|cart[aã]o nu/i.test(txt)){
+    pagEscolhido = 'Cartão Nu Bank';
+  }else if(/mercado\s*pago/i.test(txt)){
+    pagEscolhido = 'Cartão Mercado Pago';
+  }else if(/pix/i.test(txt)){
+    pagEscolhido = 'Pix';
+  }else if(/dinheiro|em esp[eé]cie/i.test(txt)){
+    pagEscolhido = 'Dinheiro';
+  }else if(/d[eé]bito/i.test(txt)){
+    pagEscolhido = 'Cartão C6 Débito';
+  }else if(/cr[eé]dito|cart[aã]o/i.test(txt)){
+    pagEscolhido = 'Cartão C6 Crédito';
+  }
+  if(pagEscolhido && D.pags.some(p=>p.n===pagEscolhido)){
+    $('l-pag').value = pagEscolhido;
+  }
+
+  // 5. Parcelas
+  const mParc = txt.match(/(?:em\s+)?(\d{1,2})\s*(?:x|vezes|parcelas)/i);
+  if(mParc && +mParc[1] > 1){
+    setModo('P');
+    $('l-parc').value = mParc[1];
+    fillPini();
+  }else{
+    setModo('U');
+  }
+
+  // 6. Valor
+  let valNum = 0;
+  const mValCent = txt.match(/(\d+)\s*(?:reais|real)?\s*e\s*(\d{1,2})(?:\s*centavos?)?/i);
+  const mValDec = txt.match(/(?:r\$\s*)?(\d+(?:[.,]\d{1,2}))/i);
+  const mValSimp = txt.match(/(\d+)\s*(?:reais|real|conto)/i);
+  const mValDig = txt.match(/(\d+)/);
+
+  if(mValCent){
+    valNum = parseFloat(`${mValCent[1]}.${mValCent[2].padEnd(2,'0')}`);
+  }else if(mValDec){
+    valNum = parseFloat(mValDec[1].replace(',', '.'));
+  }else if(mValSimp){
+    valNum = parseFloat(mValSimp[1]);
+  }else if(mValDig){
+    valNum = parseFloat(mValDig[1]);
+  }
+  if(valNum > 0) $('l-valor').value = valNum.toFixed(2);
+
+  // 7. Descrição
+  let descLimpa = txt;
+  const termosLimpar = [
+    /(?:r\$\s*)?\d+(?:[.,]\d{1,2})?\s*(?:reais|real|conto|centavos?)?/gi,
+    /no\s+pix|via\s+pix|pix/gi,
+    /no\s+dinheiro|em\s+dinheiro|em\s+esp[eé]cie|dinheiro/gi,
+    /no\s+cart[aã]o|cart[aã]o/gi,
+    /nu\s*bank|nubank/gi,
+    /c6\s*(?:cr[eé]dito|d[eé]bito)?/gi,
+    /mercado\s*pago/gi,
+    /cr[eé]dito|d[eé]bito/gi,
+    /dividid[oa]\s+com\s+[a-zà-ú]+|dividid[oa]|dividir|meio\s+a\s+meio/gi,
+    /em\s+\d+\s*(?:x|vezes|parcelas)/gi,
+    /da\s+n[eé]m|pra\s+n[eé]m|do\s+arthur/gi,
+    /comprei|lançar|lance|gastei|paguei|valor\s+de/gi
+  ];
+  termosLimpar.forEach(r => descLimpa = descLimpa.replace(r, ' '));
+  descLimpa = descLimpa.replace(/\s+/g, ' ').trim().replace(/^[,\.\- ]+|[,\.\- ]+$/g, '');
+  if(descLimpa) descLimpa = descLimpa.charAt(0).toUpperCase() + descLimpa.slice(1);
+  else descLimpa = 'Despesa';
+  $('l-desc').value = descLimpa;
+
+  // 8. Categoria inteligente
+  let catEscolhida = 'Outros';
+  const catsAtuais = (tipo==='D'?D.catsD.map(c=>c.n):D.catsR);
+  for(const c of catsAtuais){
+    if(txt.includes(c.toLowerCase()) || descLimpa.toLowerCase().includes(c.toLowerCase())){
+      catEscolhida = c; break;
+    }
+  }
+  if(catEscolhida === 'Outros' && tipo === 'D'){
+    if(/padaria|mercado|supermercado|almoço|almoco|jantar|lanche|pizza|comida|hambúrguer|açaí/i.test(txt)){
+      catEscolhida = 'Alimentação';
+    }else if(/gasolina|combustível|combustivel|posto|óleo|oleo|moto|pneu|oficina/i.test(txt)){
+      catEscolhida = 'Moto';
+    }else if(/uber|99|corrida/i.test(txt)){
+      catEscolhida = 'Uber';
+    }else if(/luz|água|agua|energia|aluguel|condomínio|condominio|internet/i.test(txt)){
+      catEscolhida = 'Moradia';
+    }else if(/cinema|praia|bar|cerveja|passeio/i.test(txt)){
+      catEscolhida = 'Lazer';
+    }else if(/farmácia|farmacia|remédio|remedio|médico|medico|consulta/i.test(txt)){
+      catEscolhida = 'Serviços';
+    }
+  }
+  if(catsAtuais.includes(catEscolhida)) $('l-cat').value = catEscolhida;
+
+  updForm(false);
+  preview();
+
+  const b = $('voz-box');
+  b.className = '';
+  b.style.background = 'rgba(79,140,255,0.12)';
+  b.style.border = '1px solid var(--acc)';
+  b.innerHTML = `🎙️ <b>Ouvido:</b> "${esc(fala)}"<br><span class="mut small">Campos preenchidos automaticamente. Revise os dados e toque em <b>Lançar</b>.</span>`;
+}
+
+function updForm(keepPago){
+  const pag=$('l-pag').value;
+  const cred=isCred(pag);
+  if(!keepPago){
+    if(cred){
+      $('l-pago').checked=false;
+    }else{
+      $('l-pago').checked=true;
+    }
+  }
+  autoPreencherVencimento();
   if(tipo==='R'&&modo==='P')modo='U';
   document.querySelectorAll('#fixa-seg button').forEach(b=>{b.classList.toggle('on',b.dataset.v===modo);if(b.dataset.v==='P')b.classList.toggle('hide',tipo==='R');});
   $('bloco-parc').classList.toggle('hide',!(tipo==='D'&&modo==='P'));
@@ -517,7 +795,7 @@ function lancar(){
   }
   D.lanc.push(...novos);extender();save();
   if($('l-cal').checked){const prim=novos.filter((x,i,a)=>a.findIndex(y=>(y.venc||y.d)===(x.venc||x.d))===i);ics(prim);}
-  $('l-valor').value='';$('l-desc').value='';$('l-div').checked=false;$('l-cal').checked=false;
+  $('l-valor').value='';$('l-desc').value='';$('l-div').checked=false;$('l-cal').checked=false;if($('voz-box'))$('voz-box').className='hide';
   render();updForm();toast(`${novos.length} lançamento(s) registrado(s) ✔`);
 }
 
@@ -536,7 +814,8 @@ function baixar(blob,nome){const a=document.createElement('a');a.href=URL.create
 /* ---------- HISTÓRICO ---------- */
 function updFiltrosBadge(){
   const fIds=['f-tipo','f-fixa','f-pessoa','f-pag','f-cat'];
-  const ativos=fIds.filter(id=>{const el=$(id);return el&&el.value!==''}).length;
+  let ativos=fIds.filter(id=>{const el=$(id);return el&&el.value!==''}).length;
+  if($('f-busca')&&$('f-busca').value.trim()!=='')ativos++;
   const b=$('f-badge');
   if(b){
     if(ativos>0){
@@ -552,12 +831,23 @@ function updFiltrosBadge(){
 }
 function filtrados(){
   const ft=$('f-tipo').value,ff=$('f-fixa').value,fp=$('f-pessoa').value,fg=$('f-pag').value,fc=$('f-cat').value;
-  return doMes().filter(l=>(!ft||l.t===ft)&&(!ff||modoDe(l)===ff)&&(!fp||l.p===fp)&&(!fg||l.pag===fg)&&(!fc||l.c===fc))
-    .sort((a,b)=>{
-      const da=a.d||a.venc||'', db=b.d||b.venc||'';
-      const c=db.localeCompare(da);
-      return c!==0?c:(b.id||'').localeCompare(a.id||'');
-    });
+  const q=($('f-busca')?.value||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return doMes().filter(l=>{
+    if(ft&&l.t!==ft)return false;
+    if(ff&&modoDe(l)!==ff)return false;
+    if(fp&&l.p!==fp)return false;
+    if(fg&&l.pag!==fg)return false;
+    if(fc&&l.c!==fc)return false;
+    if(q){
+      const alvo=((l.desc||'')+' '+(l.c||'')+' '+(l.pag||'')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      if(!alvo.includes(q))return false;
+    }
+    return true;
+  }).sort((a,b)=>{
+    const da=a.d||a.venc||'', db=b.d||b.venc||'';
+    const c=db.localeCompare(da);
+    return c!==0?c:(b.id||'').localeCompare(a.id||'');
+  });
 }
 function renderHist(){
   updFiltrosBadge();
@@ -662,7 +952,19 @@ function salvarEdit(todos){
 /* ---------- CONFIG ---------- */
 function renderCfg(){
   $('c-pessoas').innerHTML=D.pessoas.map((p,i)=>`<div class="tagrow">${sw('p',p)}<input data-pes="${i}" value="${esc(p)}">${i?`<button class="btn sm danger" data-rpes="${i}">✕</button>`:''}</div>`).join('');
-  $('c-pags').innerHTML=D.pags.map((p,i)=>`<div class="tagrow">${sw('pag',p.n)}<input data-pag="${i}" value="${esc(p.n)}"><label class="check" style="margin:0;white-space:nowrap"><input type="checkbox" data-cred="${i}" ${p.cred?'checked':''}> crédito</label><button class="btn sm danger" data-rpag="${i}">✕</button></div>`).join('');
+  $('c-pags').innerHTML=D.pags.map((p,i)=>{
+    const credInputs=p.cred?`
+      <div style="display:flex;align-items:center;gap:6px;margin:4px 0 8px 34px;font-size:12px;color:var(--mut);flex-wrap:wrap">
+        <span>Fecha dia:</span>
+        <input type="number" min="1" max="31" data-fech="${i}" value="${p.fech||''}" placeholder="15" style="width:54px;padding:3px 6px;text-align:center" title="Dia do fechamento">
+        <span>Vence dia:</span>
+        <input type="number" min="1" max="31" data-venc="${i}" value="${p.venc||''}" placeholder="20" style="width:54px;padding:3px 6px;text-align:center" title="Dia do vencimento">
+      </div>`:'' ;
+    return `<div style="border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:4px;margin-bottom:4px">
+      <div class="tagrow">${sw('pag',p.n)}<input data-pag="${i}" value="${esc(p.n)}"><label class="check" style="margin:0;white-space:nowrap"><input type="checkbox" data-cred="${i}" ${p.cred?'checked':''}> crédito</label><button class="btn sm danger" data-rpag="${i}">✕</button></div>
+      ${credInputs}
+    </div>`;
+  }).join('');
   $('c-catsd').innerHTML=D.catsD.map((c,i)=>`<div class="tagrow">${sw('c',c.n)}<input data-catd="${i}" value="${esc(c.n)}"><input type="number" step="0.01" style="max-width:110px" data-lim="${i}" value="${c.lim}"><button class="btn sm danger" data-rcatd="${i}">✕</button></div>`).join('');
   $('c-catsr').innerHTML=D.catsR.map((c,i)=>`<div class="tagrow">${sw('c',c)}<input data-catr="${i}" value="${esc(c)}"><button class="btn sm danger" data-rcatr="${i}">✕</button></div>`).join('');
   $('c-dias').value=D.dias;
@@ -677,9 +979,9 @@ $('mes').onchange=e=>{mesSel=e.target.value||hoje().slice(0,7);render();};
 document.querySelectorAll('#tipo-seg button').forEach(b=>b.onclick=()=>setTipo(b.dataset.v));
 document.querySelectorAll('#fixa-seg button').forEach(b=>b.onclick=()=>setModo(b.dataset.v));
 ['l-valor','l-parc','l-pessoa2'].forEach(id=>$(id).addEventListener('input',preview));
-$('l-pag').onchange=updForm;$('l-div').onchange=updForm;$('l-parc').onchange=preview;
+$('l-pag').onchange=()=>updForm(false);$('l-div').onchange=()=>updForm(true);$('l-parc').onchange=preview;
 $('l-pessoa').onchange=()=>{fillSelects();preview();};
-$('l-data').onchange=()=>{if(!$('l-venc').value)$('l-venc').value=$('l-data').value;};
+$('l-data').onchange=()=>{autoPreencherVencimento();preview();};if($('btn-voz'))$('btn-voz').onclick=toggleVoz;
 $('l-add').onclick=lancar;
 document.querySelectorAll('#vmodo-seg button').forEach(b=>b.onclick=()=>setVmodo(b.dataset.v));
 $('l-parc').addEventListener('change',()=>{fillPini();preview();});$('l-pini').onchange=preview;
@@ -689,7 +991,8 @@ $('cor-pal').onclick=e=>{const b=e.target.closest('[data-pc]');if(!b)return;$('c
 $('cor-ok').onclick=()=>{if(corAlvo){D.cores[corAlvo.k][corAlvo.n]=$('cor-livre').value;save();}$('mcor').classList.remove('on');render();toast('Cor salva ✔');};
 $('cor-cancel').onclick=()=>$('mcor').classList.remove('on');
 ['f-tipo','f-fixa','f-pessoa','f-pag','f-cat'].forEach(id=>$(id).onchange=renderHist);
-if($('f-limpar'))$('f-limpar').onclick=()=>{['f-tipo','f-fixa','f-pessoa','f-pag','f-cat'].forEach(id=>{if($(id))$(id).value='';});renderHist();};
+if($('f-limpar'))$('f-limpar').onclick=()=>{['f-tipo','f-fixa','f-pessoa','f-pag','f-cat','f-busca'].forEach(id=>{if($(id))$(id).value='';});renderHist();};
+if($('f-busca'))$('f-busca').oninput=renderHist;
 
 document.addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;const ds=t.dataset;
@@ -711,7 +1014,13 @@ document.addEventListener('change',e=>{
   const ds=e.target.dataset,v=e.target.value.trim();if(!ds)return;
   if(ds.pes!==undefined&&v){renomear('p',D.pessoas[+ds.pes],v);D.pessoas[+ds.pes]=v;}
   else if(ds.pag!==undefined&&v){renomear('pag',D.pags[+ds.pag].n,v);D.pags[+ds.pag].n=v;}
-  else if(ds.cred!==undefined){D.pags[+ds.cred].cred=e.target.checked;}
+  else if(ds.cred!==undefined){
+    D.pags[+ds.cred].cred=e.target.checked;
+    if(e.target.checked&&!D.pags[+ds.cred].fech){D.pags[+ds.cred].fech=15;D.pags[+ds.cred].venc=20;}
+    renderCfg();
+  }
+  else if(ds.fech!==undefined){D.pags[+ds.fech].fech=Math.min(31,Math.max(1,+v||1));}
+  else if(ds.venc!==undefined){D.pags[+ds.venc].venc=Math.min(31,Math.max(1,+v||1));}
   else if(ds.catd!==undefined&&v){renomear('c',D.catsD[+ds.catd].n,v);D.catsD[+ds.catd].n=v;}
   else if(ds.lim!==undefined){D.catsD[+ds.lim].lim=parseFloat(v)||0;}
   else if(ds.catr!==undefined&&v){renomear('c',D.catsR[+ds.catr],v);D.catsR[+ds.catr]=v;}
@@ -747,8 +1056,8 @@ $('b-imp').onclick=()=>$('b-file').click();
 $('b-file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const o=JSON.parse(r.result);if(!Array.isArray(o.lanc))throw 0;D=Object.assign(JSON.parse(JSON.stringify(DEF)),o);save();render();toast('Backup importado ✔');}catch(x){alert('Arquivo inválido.');}};r.readAsText(f);e.target.value='';};
 $('b-del').onclick=()=>{if(confirm('Apagar TODOS os dados?')&&confirm('Tem certeza? Não dá para desfazer.')){D=JSON.parse(JSON.stringify(DEF));save();render();}};
 
-$('l-data').value=hoje();$('l-venc').value=hoje();$('l-receb').value=hoje();
-fillSelects();render();updForm();notificar();
+$('l-data').value=hoje();$('l-receb').value=hoje();
+fillSelects();autoPreencherVencimento();render();updForm();notificar();
 </script>
 <script>(()=>{const g=document.getElementById("gav-orc");g.open=localStorage.getItem("gav_orc")==="1";g.addEventListener("toggle",()=>localStorage.setItem("gav_orc",g.open?"1":"0"))})()</script>
 </body>
